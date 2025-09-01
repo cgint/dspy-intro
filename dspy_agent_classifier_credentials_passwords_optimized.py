@@ -1,0 +1,269 @@
+#!/usr/bin/env python3
+# /// script
+# dependencies = [
+#     "dspy-ai",
+#     "mlflow"
+# ]
+# requires-python = ">=3.11"
+# ///
+
+from typing import Any, Literal, Optional, Union, Dict
+from datetime import datetime
+import time
+import dspy
+from dspy.teleprompt.gepa.gepa import GEPAFeedbackMetric
+from dspy.teleprompt.gepa.gepa_utils import ScoreWithFeedback
+import mlflow
+from dspy_agent_classifier_credentials_passwords_examples import (
+    prepare_training_data,
+    prepare_test_data
+)
+from dspy_agent_classifier_credentials_passwords import ClassifierCredentialsPasswords, classifier_lm, classifier_lm_model_name, classifier_lm_reasoning_effort
+from dspy_constants import MODEL_NAME_GEMINI_2_5_FLASH
+
+mlflow.set_experiment("dspy_agent_classifier_credentials_passwords_optimized")
+mlflow.autolog()
+
+# --- Metric for Optimization ---
+
+def classification_accuracy(example: dspy.Example, pred: dspy.Prediction, trace=None) -> float:
+    """
+    Metric function for MIPROv2 optimization.
+    Returns 1.0 for correct classification, 0.0 for incorrect.
+    """
+    return float(example.classification == pred.classification)
+
+
+
+class ClassificationAccuracyWithFeedbackMetric(GEPAFeedbackMetric):
+	def __call__(
+		self,
+		gold: dspy.Example,
+		pred: dspy.Prediction,
+		trace: Any = None,
+		pred_name: Optional[str] = None,
+		pred_trace: Any = None,
+	) -> Union[float, ScoreWithFeedback]:
+		answer_is_same = classification_accuracy(gold, pred)
+		total = answer_is_same
+		if pred_name is None:
+			return total
+		if not answer_is_same:
+			feedback = "The classifier is not working as expected. Please check the classifier module."
+		else:
+			feedback = "The classifier is working as expected."
+		return ScoreWithFeedback(score=total, feedback=feedback)
+
+
+# --- Data Preparation ---
+
+# --- MIPROv2 Optimization ---
+
+def to_percent_int(input: Any) -> int:
+    if isinstance(input, float):
+        return int(input)
+    else:
+        raise ValueError(f"Cannot convert {input} to float. Type: {type(input)}")
+
+def optimize_classifier(optimizer_type: Literal["MIPROv2", "GEPA"], trainer_lm: dspy.LM, auto: Literal["light", "medium", "heavy"], limit_trainset: int, limit_testset: int, randomize_sets: bool, reflection_minibatch_size: int):
+    """
+    Optimize the classifier using DSPy MIPROv2
+    """
+    
+    print(f"🚀 Starting MIPROv2 optimization with parameters: optimizer_type={optimizer_type}, trainer_lm={trainer_lm.model}, auto={auto}")
+    
+    # Prepare data
+    trainset = prepare_training_data(limit=limit_trainset, randomize=randomize_sets)
+    testset = prepare_test_data(limit=limit_testset, randomize=randomize_sets)
+    
+    print(f"Training set size: {len(trainset)}")
+    print(f"Test set size: {len(testset)}")
+    
+    # Test baseline performance
+    print("\n📊 Baseline Performance:")
+    baseline_score = dspy.Evaluate(
+        devset=testset, 
+        metric=classification_accuracy,
+        num_threads=4,
+        display_progress=True
+    )(ClassifierCredentialsPasswords())
+    print(f"Baseline accuracy: {to_percent_int(baseline_score.score)}%")
+    
+    # Initialize MIPROv2 optimizer
+    # Using "light" for fast optimization, can try "medium" or "heavy" for better results
+    print("\n🔧 Running MIPROv2 optimization...")
+    print("This may take a few minutes...")
+    
+    if optimizer_type == "MIPROv2":
+        optimizer = dspy.MIPROv2(
+            metric=classification_accuracy,
+            auto=auto,  # Options: "light", "medium", "heavy"
+            num_threads=4,
+            max_bootstrapped_demos=0,
+            max_labeled_demos=0,
+            prompt_model=trainer_lm
+        )
+    elif optimizer_type == "GEPA":
+        optimizer = dspy.GEPA(
+            metric=ClassificationAccuracyWithFeedbackMetric(),
+            auto=auto,
+            num_threads=4,
+            track_stats=True,
+            skip_perfect_score=True,
+            add_format_failure_as_feedback=True,
+            reflection_minibatch_size=reflection_minibatch_size,
+            reflection_lm=trainer_lm
+        )
+    
+    # Compile/optimize the classifier
+    optimized_classifier = optimizer.compile(
+        ClassifierCredentialsPasswords(),
+        trainset=trainset,
+        valset=testset
+    )
+    
+    # Test optimized performance
+    print("\n🎯 Optimized Performance:")
+    optimized_score = dspy.Evaluate(
+        devset=testset,
+        metric=classification_accuracy,
+        num_threads=4,
+        display_progress=True
+    )(optimized_classifier)
+    
+    baseline_score_int = to_percent_int(baseline_score.score)
+    optimized_score_int = to_percent_int(optimized_score.score)
+    print("\n📈 Results:")
+    print(f"Baseline accuracy:  {baseline_score_int}%")
+    print(f"Optimized accuracy: {optimized_score_int}%")
+
+    save_path = f"optimized_credentials_classifier_{int(time.time())}_{baseline_score_int}_to_{optimized_score_int}.json"
+    optimized_classifier.save(save_path)
+    print(f"\n💾 Optimized classifier saved to: {save_path}")
+    
+    return optimized_classifier, save_path, baseline_score_int, optimized_score_int
+
+
+def test_classifier_examples(classifier, examples_desc="", question_prefix="") -> Dict[str, str]:
+    """Test the classifier with some example inputs"""
+    print(f"\n🧪 Testing {examples_desc}:")
+    
+    test_inputs = [
+        "My username is john and password is secret123",
+        "API token: sk-abc123def456",
+        "Please enter your password: [REDACTED]",
+        "The user needs to provide valid credentials",
+        "Database password: ***hidden***"
+    ]
+    
+    results = {}
+    for test_input in test_inputs:
+        result = classifier(classify_input=test_input)
+        results[test_input] = result.classification
+        print(f"Input: {test_input}")
+        print(f"Classification: {result.classification}")
+        if hasattr(result, 'reasoning'):
+            print(f"Reasoning: {result.reasoning}")
+        print("-" * 50)
+    return results
+
+
+# --- Example Usage ---
+
+def log_as_table(results: Dict[str, str], optimization_type: Literal["baseline", "optimized"]) -> None:
+    """
+    Log test results as a structured table to MLflow.
+    
+    Args:
+        results: Dictionary mapping test inputs to classification results
+        optimization_type: Type of model ("baseline" or "optimized")
+    """
+    # Parse the results dictionary to extract questions and answers
+    table_data = {
+        "test_number": [],
+        "question": [],
+        "answer": [],
+        "optimization_type": []
+    }
+    
+    for i, (question_with_prefix, answer) in enumerate(results.items(), 1):
+        # Remove the model type prefix from the question
+        if question_with_prefix.startswith(f"{optimization_type}_"):
+            question = question_with_prefix[len(f"{optimization_type}_"):]
+        else:
+            question = question_with_prefix
+            
+        table_data["test_number"].append(i)
+        table_data["question"].append(question)
+        table_data["answer"].append(answer)
+        table_data["optimization_type"].append(optimization_type)
+    
+    # Log the table to MLflow
+    artifact_file = f"{optimization_type}_test_results.json"
+    mlflow.log_table(data=table_data, artifact_file=artifact_file)
+    print(f"✅ {optimization_type.title()} test results logged to MLflow as table: {artifact_file}")
+
+
+if __name__ == "__main__":
+    try:
+        dspy.settings.configure(lm=classifier_lm, track_usage=False)
+        dspy.configure_cache(
+            enable_disk_cache=False,
+            enable_memory_cache=False
+        )
+        print(f"✅ DSPy configured to use {dspy.settings.lm.model}.")
+    except Exception as e:
+        print(f"❌ Error configuring DSPy: {e}")
+        exit(1)
+    
+    formatter_date_now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    with mlflow.start_run(run_name=f"pwd_classifier_{formatter_date_now}"):
+        
+        # Optimize classifier with
+        trainer_lm_model_name = MODEL_NAME_GEMINI_2_5_FLASH
+        trainer_lm_reasoning_effort = "disable"
+        optimizer_type = "GEPA" # "MIPROv2" # "GEPA"
+        auto = "light"  # <-- We will use a light budget for this tutorial. However, we typically recommend using auto="heavy" for optimized performance!
+        limit_trainset = 50
+        limit_testset = 30
+        randomize_sets = True
+        reflection_minibatch_size = limit_testset # Used in GEPA only - when too low then it can loop on seemingly perfect proposed candidates
+
+        mlflow.log_param("classifier_lm_model", classifier_lm_model_name)
+        mlflow.log_param("classifier_lm_reasoning_effort", classifier_lm_reasoning_effort)
+        mlflow.log_param("trainer_lm_model", trainer_lm_model_name)
+        mlflow.log_param("trainer_lm_reasoning_effort", trainer_lm_reasoning_effort)
+        mlflow.log_param("optimizer_type", optimizer_type)
+        mlflow.log_param("auto", auto)
+        mlflow.log_param("limit_trainset", limit_trainset)
+        mlflow.log_param("limit_testset", limit_testset)
+        mlflow.log_param("randomize_sets", randomize_sets)
+        mlflow.log_param("reflection_minibatch_size", reflection_minibatch_size)
+
+        # Test baseline classifier
+        baseline_classifier = ClassifierCredentialsPasswords()
+        baseline_results = test_classifier_examples(baseline_classifier, "Baseline Classifier")
+        log_as_table(baseline_results, optimization_type="baseline")
+
+        trainer_lm = dspy.LM(
+            model=f'vertex_ai/{trainer_lm_model_name}',
+            reasoning_effort=trainer_lm_reasoning_effort # other options are Literal["low", "medium", "high"]
+            # thinking={"type": "enabled", "budget_tokens": 512}
+        )
+
+        optimizer_start_time_sec = time.time()
+        optimized_classifier, save_path, baseline_score_int, optimized_score_int = optimize_classifier(optimizer_type, trainer_lm, auto, limit_trainset, limit_testset, randomize_sets, reflection_minibatch_size)
+        optimizer_end_time_sec = time.time()
+        optimizer_duration_sec = optimizer_end_time_sec - optimizer_start_time_sec
+        mlflow.log_metric("optimizer_duration_seconds", optimizer_duration_sec)
+        
+        # Test optimized classifier
+        optimized_results = test_classifier_examples(optimized_classifier, "Optimized Classifier")
+        log_as_table(optimized_results, optimization_type="optimized")
+
+        mlflow.log_metric("baseline_accuracy", baseline_score_int)
+        mlflow.log_metric("optimized_accuracy", optimized_score_int)
+    
+    print(f"\n🎉 Optimization complete! Optimized model saved to: {save_path}")
+    print(f"Baseline accuracy: {baseline_score_int}%")
+    print(f"Optimized accuracy: {optimized_score_int}%")

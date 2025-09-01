@@ -1,0 +1,30 @@
+[project]
+name = "dspy-intro"
+version = "0.1.0"
+requires-python = "==3.13.*"
+dependencies = [
+    "google-generativeai",
+    "dspy-ai",
+    "mlflow",
+    "trafilatura",
+    "langchain-text-splitters",
+    "tavily-python",
+    "markdown",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.20.0",
+    "python-socketio>=5.8.0",
+    "python-multipart>=0.0.6",
+    "psutil>=5.9.0",
+    "mcp[cli]>=1.13.1",
+    "langchain-community>=0.3.29",
+]
+
+[dependency-groups]
+dev = [
+    "mypy",
+    "ruff>=0.12.4",
+    "pytest",
+    "types-Markdown",
+    "types-protobuf",
+    "types-psutil"
+]
