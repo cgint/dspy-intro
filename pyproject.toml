@@ -28,3 +28,18 @@ dev = [
     "types-protobuf",
     "types-psutil"
 ]
+
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[project.scripts]
+optimizer = "classifier_credentials.dspy_agent_classifier_credentials_passwords_optimized:main"
+password = "classifier_credentials.dspy_agent_classifier_credentials_passwords:main"
+simplest = "simplest.simplest_dspy:main"

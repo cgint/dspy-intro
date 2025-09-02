@@ -56,3 +56,6 @@ playwright-report/
 
 .aider*
 !.aider.conf.yml
+
+# Ignore Code Giant output directory
+.codegiant/

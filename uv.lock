@@ -464,7 +464,7 @@ wheels = [
 [[package]]
 name = "dspy-intro"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "dspy-ai" },
     { name = "fastapi" },

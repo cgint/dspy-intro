@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-# /// script
-# dependencies = [
-#     "dspy-ai",
-#     "mlflow"
-# ]
-# requires-python = ">=3.11"
-# ///
-
 from typing import Any, Literal, Optional, Union, Dict
 from datetime import datetime
 import time
@@ -14,15 +5,18 @@ import dspy
 from dspy.teleprompt.gepa.gepa import GEPAFeedbackMetric
 from dspy.teleprompt.gepa.gepa_utils import ScoreWithFeedback
 import mlflow
-from dspy_agent_classifier_credentials_passwords_examples import (
+from classifier_credentials.dspy_agent_classifier_credentials_passwords_examples import (
     prepare_training_data,
     prepare_test_data
 )
-from dspy_agent_classifier_credentials_passwords import ClassifierCredentialsPasswords, classifier_lm, classifier_lm_model_name, classifier_lm_reasoning_effort
-from dspy_constants import MODEL_NAME_GEMINI_2_5_FLASH
+from classifier_credentials.dspy_agent_classifier_credentials_passwords import ClassifierCredentialsPasswords, classifier_lm_model_name, classifier_lm_reasoning_effort
+from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.utils import dspy_configure, get_lm_for_model_name
+from common.mlflow_utils import log_as_table
 
 mlflow.set_experiment("dspy_agent_classifier_credentials_passwords_optimized")
 mlflow.autolog()
+# call 'uv run mlflow server --host 127.0.0.1 --port 8182' and head to http://127.0.0.1:8182
 
 # --- Metric for Optimization ---
 
@@ -32,7 +26,6 @@ def classification_accuracy(example: dspy.Example, pred: dspy.Prediction, trace=
     Returns 1.0 for correct classification, 0.0 for incorrect.
     """
     return float(example.classification == pred.classification)
-
 
 
 class ClassificationAccuracyWithFeedbackMetric(GEPAFeedbackMetric):
@@ -54,8 +47,6 @@ class ClassificationAccuracyWithFeedbackMetric(GEPAFeedbackMetric):
 			feedback = "The classifier is working as expected."
 		return ScoreWithFeedback(score=total, feedback=feedback)
 
-
-# --- Data Preparation ---
 
 # --- MIPROv2 Optimization ---
 
@@ -168,53 +159,9 @@ def test_classifier_examples(classifier, examples_desc="", question_prefix="") -
     return results
 
 
-# --- Example Usage ---
-
-def log_as_table(results: Dict[str, str], optimization_type: Literal["baseline", "optimized"]) -> None:
-    """
-    Log test results as a structured table to MLflow.
+def main():
+    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable"))
     
-    Args:
-        results: Dictionary mapping test inputs to classification results
-        optimization_type: Type of model ("baseline" or "optimized")
-    """
-    # Parse the results dictionary to extract questions and answers
-    table_data = {
-        "test_number": [],
-        "question": [],
-        "answer": [],
-        "optimization_type": []
-    }
-    
-    for i, (question_with_prefix, answer) in enumerate(results.items(), 1):
-        # Remove the model type prefix from the question
-        if question_with_prefix.startswith(f"{optimization_type}_"):
-            question = question_with_prefix[len(f"{optimization_type}_"):]
-        else:
-            question = question_with_prefix
-            
-        table_data["test_number"].append(i)
-        table_data["question"].append(question)
-        table_data["answer"].append(answer)
-        table_data["optimization_type"].append(optimization_type)
-    
-    # Log the table to MLflow
-    artifact_file = f"{optimization_type}_test_results.json"
-    mlflow.log_table(data=table_data, artifact_file=artifact_file)
-    print(f"✅ {optimization_type.title()} test results logged to MLflow as table: {artifact_file}")
-
-
-if __name__ == "__main__":
-    try:
-        dspy.settings.configure(lm=classifier_lm, track_usage=False)
-        dspy.configure_cache(
-            enable_disk_cache=False,
-            enable_memory_cache=False
-        )
-        print(f"✅ DSPy configured to use {dspy.settings.lm.model}.")
-    except Exception as e:
-        print(f"❌ Error configuring DSPy: {e}")
-        exit(1)
     
     formatter_date_now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     with mlflow.start_run(run_name=f"pwd_classifier_{formatter_date_now}"):
@@ -245,11 +192,7 @@ if __name__ == "__main__":
         baseline_results = test_classifier_examples(baseline_classifier, "Baseline Classifier")
         log_as_table(baseline_results, optimization_type="baseline")
 
-        trainer_lm = dspy.LM(
-            model=f'vertex_ai/{trainer_lm_model_name}',
-            reasoning_effort=trainer_lm_reasoning_effort # other options are Literal["low", "medium", "high"]
-            # thinking={"type": "enabled", "budget_tokens": 512}
-        )
+        trainer_lm = get_lm_for_model_name(trainer_lm_model_name, trainer_lm_reasoning_effort)
 
         optimizer_start_time_sec = time.time()
         optimized_classifier, save_path, baseline_score_int, optimized_score_int = optimize_classifier(optimizer_type, trainer_lm, auto, limit_trainset, limit_testset, randomize_sets, reflection_minibatch_size)
@@ -267,3 +210,7 @@ if __name__ == "__main__":
     print(f"\n🎉 Optimization complete! Optimized model saved to: {save_path}")
     print(f"Baseline accuracy: {baseline_score_int}%")
     print(f"Optimized accuracy: {optimized_score_int}%")
+
+
+if __name__ == "__main__":
+    main()
