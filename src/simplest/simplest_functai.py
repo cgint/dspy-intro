@@ -1,4 +1,3 @@
-
 from functai import ai, _ai, configure
 from common.utils import get_model_access_prefix_or_fail
 from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
