@@ -23,11 +23,11 @@ def main():
 
     with mlflow.start_run(run_name="simplest_dspy_joke_for_john"):
         the_joke=joke_for_john()
-        print(f"\n\n{the_joke}\n\n ->")
+        print(f"\n\n{the_joke}")
     
     with mlflow.start_run(run_name="simplest_dspy_joke_for_john_funnyness_factor"):
         funnyness: int = joke_funnyness_factor(the_joke)
-        print(f" -> How funny is the joke on a scale of 0 to 10? {funnyness}\n\n")
+        print(f" -> How funny is the joke on a scale of 0 to 10? {funnyness}\n")
 
 if __name__ == "__main__":
     main()
