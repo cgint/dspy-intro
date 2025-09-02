@@ -1,10 +1,20 @@
-# DSPy Intro - Credentials Classifier Examples
+# DSPy Intro - Credentials Classifier Examples + Simplest Example
+
+[https://github.com/stanfordnlp/dspy](https://github.com/stanfordnlp/dspy)
 
 This repository contains runnable DSPy examples:
 
 - Credentials/passwords classifier
 - Optimizer that improves the classifier with GEPA/MIPROv2
 - A minimal DSPy demo
+
+# FunctAI Intro - Simplest Example
+
+[https://github.com/MaximeRivest/functai](https://github.com/MaximeRivest/functai)
+
+This repository contains runnable FunctAI examples:
+
+- A minimal FunctAI demo
 
 ## Requirements
 
@@ -36,7 +46,11 @@ Console scripts are defined in pyproject.toml:
 
 ```bash
 # Minimal DSPy example
-uv run simplest
+uv run simplestdspy
+
+# Minimal FunctAI example
+uv run simplestfunctai
+
 
 # Basic credentials/passwords classifier
 uv run password
@@ -52,13 +66,14 @@ uv run optimizer
 ├── README.md
 └── src
     ├── simplest
-    │   ├── simplest_dspy.py  # minimal DSPy example + main()
+    │   ├── simplest_dspy.py     # minimal DSPy example
+    │   ├── simplest_functai.py  # minimal FunctAI example
     ├── common
     │   ├── constants.py      # model names
     │   ├── mlflow_utils.py   # MLflow helpers
     │   └── utils.py          # LM factory and dspy_configure helpers
     ├── classifier_credentials
-    │   ├── dspy_agent_classifier_credentials_passwords_examples.py   # data prep & example sets
-    │   ├── dspy_agent_classifier_credentials_passwords.py            # basic classifier + main()
-    │   └── dspy_agent_classifier_credentials_passwords_optimized.py  # optimizer (GEPA/MIPROv2) + main()
+    │   ├── dspy_agent_classifier_credentials_passwords.py            # basic classifier
+    │   ├── dspy_agent_classifier_credentials_passwords_optimized.py  # optimizer (GEPA/MIPROv2)
+    │   └── dspy_agent_classifier_credentials_passwords_examples.py   # data prep & example sets
 ```

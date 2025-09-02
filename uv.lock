@@ -407,6 +407,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "dspy-ai" },
+    { name = "functai" },
     { name = "google-generativeai" },
     { name = "mlflow" },
 ]
@@ -424,6 +425,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dspy-ai" },
+    { name = "functai" },
     { name = "google-generativeai" },
     { name = "mlflow" },
 ]
@@ -557,6 +559,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/8b/02/0835e6ab9cfc03916fe3f78c0956cfcdb6ff2669ffa6651065d5ebf7fc98/fsspec-2025.7.0.tar.gz", hash = "sha256:786120687ffa54b8283d942929540d8bc5ccfa820deb555a2b5d0ed2b737bf58", size = 304432, upload-time = "2025-07-15T16:05:21.19Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2f/e0/014d5d9d7a4564cf1c40b5039bc882db69fd881111e03ab3657ac0b218e2/fsspec-2025.7.0-py3-none-any.whl", hash = "sha256:8b012e39f63c7d5f10474de957f3ab793b47b45ae7d39f2fb735f8bbe25c0e21", size = 199597, upload-time = "2025-07-15T16:05:19.529Z" },
+]
+
+[[package]]
+name = "functai"
+version = "0.8.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "dspy" },
+    { name = "typing" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/44/60/07321fdb7dbf0cdbfe3cff806c80736919e4600d78e9c29a2675959148ef/functai-0.8.1.tar.gz", hash = "sha256:dda63a121f1054593ea31ad79cd9976fb3a147e2f15b72fcea749c23d3180540", size = 41520, upload-time = "2025-09-02T11:28:28.998Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/72/c6/0807dfe333c31a47907549ce92c09e649bfcfba1f5145d560062c3a33a76/functai-0.8.1-py3-none-any.whl", hash = "sha256:91d37f9996a58166988ffa6daf04d87124a5cd2ea85be21dee850641c59ebdff", size = 35078, upload-time = "2025-09-02T11:28:28.211Z" },
 ]
 
 [[package]]
@@ -2134,6 +2149,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6d/aa/09699c829d7cc4624138d3ae67eecd4de9574e55729b1c63ca3e5a657f86/types_psutil-7.0.0.20250822.tar.gz", hash = "sha256:226cbc0c0ea9cc0a50b8abcc1d91a26c876dcb40be238131f697883690419698", size = 20358, upload-time = "2025-08-22T03:02:04.556Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7d/46/45006309e20859e12c024d91bb913e6b89a706cd6f9377031c9f7e274ece/types_psutil-7.0.0.20250822-py3-none-any.whl", hash = "sha256:81c82f01aba5a4510b9d8b28154f577b780be75a08954aed074aa064666edc09", size = 23110, upload-time = "2025-08-22T03:02:03.38Z" },
+]
+
+[[package]]
+name = "typing"
+version = "3.10.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b0/1b/835d4431805939d2996f8772aca1d2313a57e8860fec0e48e8e7dfe3a477/typing-3.10.0.0.tar.gz", hash = "sha256:13b4ad211f54ddbf93e5901a9967b1e07720c1d1b78d596ac6a439641aa1b130", size = 78962, upload-time = "2021-05-01T18:03:58.186Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/5d/865e17349564eb1772688d8afc5e3081a5964c640d64d1d2880ebaed002d/typing-3.10.0.0-py3-none-any.whl", hash = "sha256:12fbdfbe7d6cca1a42e485229afcb0b0c8259258cfb919b8a5e2a5c953742f89", size = 26320, upload-time = "2021-05-01T18:03:56.398Z" },
 ]
 
 [[package]]

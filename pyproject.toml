@@ -6,6 +6,7 @@ dependencies = [
     "google-generativeai",
     "dspy-ai",
     "mlflow",
+    "functai"
 ]
 
 [dependency-groups]
@@ -31,4 +32,5 @@ where = ["src"]
 [project.scripts]
 optimizer = "classifier_credentials.dspy_agent_classifier_credentials_passwords_optimized:main"
 password = "classifier_credentials.dspy_agent_classifier_credentials_passwords:main"
-simplest = "simplest.simplest_dspy:main"
+simplestdspy = "simplest.simplest_dspy:main"
+simplestfunctai = "simplest.simplest_functai:main"
