@@ -40,11 +40,15 @@ def main():
 
     with mlflow.start_run():
         classifier = ClassifierCredentialsPasswords()
-        input_text = "My username is john and password is secret123"
-        result = classifier(classify_input=input_text)
-        print(f"Input text: {input_text}")
-        print(f"Classification: {result.classification}")
-        print(result)
+        input_text_unsafe = "My username is john and password is secret123"
+        result = classifier(classify_input=input_text_unsafe)
+        print(f"\n\nInput text: {input_text_unsafe}")
+        print(f"  -> Classification: {result.classification}")
+
+        input_text_safe = "My login is admin and my password is --REDACTED--"
+        result = classifier(classify_input=input_text_safe)
+        print(f"\n\nInput text: {input_text_safe}")
+        print(f"  -> Classification: {result.classification}")
 
 
 if __name__ == "__main__":

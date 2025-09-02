@@ -51,14 +51,14 @@ uv run optimizer
 ├── pyproject.toml
 ├── README.md
 └── src
-    ├── classifier_credentials
-    │   ├── dspy_agent_classifier_credentials_passwords_examples.py   # data prep & example sets
-    │   ├── dspy_agent_classifier_credentials_passwords.py            # basic classifier + main()
-    │   └── dspy_agent_classifier_credentials_passwords_optimized.py  # optimizer (GEPA/MIPROv2) + main()
+    ├── simplest
+    │   ├── simplest_dspy.py  # minimal DSPy example + main()
     ├── common
     │   ├── constants.py      # model names
     │   ├── mlflow_utils.py   # MLflow helpers
     │   └── utils.py          # LM factory and dspy_configure helpers
-    └── simplest
-        └── simplest_dspy.py  # minimal DSPy example + main()
+    ├── classifier_credentials
+    │   ├── dspy_agent_classifier_credentials_passwords_examples.py   # data prep & example sets
+    │   ├── dspy_agent_classifier_credentials_passwords.py            # basic classifier + main()
+    │   └── dspy_agent_classifier_credentials_passwords_optimized.py  # optimizer (GEPA/MIPROv2) + main()
 ```
