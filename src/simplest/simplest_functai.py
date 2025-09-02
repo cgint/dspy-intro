@@ -16,7 +16,7 @@ def main():
     model_name = f"{model_access_prefix}{MODEL_NAME_GEMINI_2_5_FLASH}"
     configure(lm=model_name, temperature=0.2, adapter="json")
 
-    the_joke=joke_for_john()
+    the_joke: str = joke_for_john()
     print(f"\n\n{the_joke}")
     
     funnyness: int = joke_funnyness_factor_0_to_10(the_joke)

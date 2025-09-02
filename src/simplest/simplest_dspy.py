@@ -6,8 +6,7 @@ from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
 def joke_for_john() -> str:
     joker = dspy.Predict("name -> joke")
     the_joke_prediction = joker(name="John")
-    the_joke = the_joke_prediction.joke
-    return the_joke
+    return the_joke_prediction.joke
 
 def joke_funnyness_factor(joke: str) -> int:
     funnyness_evaluator = dspy.Predict("joke -> funnyness_0_to_10: int")
@@ -17,7 +16,7 @@ def joke_funnyness_factor(joke: str) -> int:
 def main():
     dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable"))
 
-    the_joke=joke_for_john()
+    the_joke: str = joke_for_john()
     print(f"\n\n{the_joke}")
     
     funnyness: int = joke_funnyness_factor(the_joke)
