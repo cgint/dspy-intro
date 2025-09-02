@@ -14,17 +14,18 @@ def joke_for_john() -> str:
     return the_joke
 
 def joke_funnyness_factor(joke: str) -> int:
-    joker = dspy.Predict("joke -> funnyness_0_to_10: int")
-    the_joke_prediction = joker(joke=joke)
-    return the_joke_prediction.funnyness_0_to_10
+    funnyness_evaluator = dspy.Predict("joke -> funnyness_0_to_10: int")
+    funnyness_prediction = funnyness_evaluator(joke=joke)
+    return funnyness_prediction.funnyness_0_to_10
 
 def main():
     dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable"))
     with mlflow.start_run(run_name="simplest_dspy_joke_for_john"):
         the_joke=joke_for_john()
-        print("\n\n" + the_joke + "\n")
-    with mlflow.start_run(run_name="simplest_dspy_joke_for_mary_with_funnyness_factor"):
-        print(" -> How funny is the joke on a scale of 0 to 10? " + str(joke_funnyness_factor(the_joke)) + "\n\n")
+        print(f"\n\n{the_joke}\n\n ->")
+    with mlflow.start_run(run_name="simplest_dspy_joke_for_john_funnyness_factor"):
+        funnyness: int = joke_funnyness_factor(the_joke)
+        print(f" -> How funny is the joke on a scale of 0 to 10? {funnyness}\n\n")
 
 if __name__ == "__main__":
     main()
