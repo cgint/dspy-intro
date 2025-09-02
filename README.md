@@ -7,14 +7,13 @@ This repository contains runnable DSPy examples:
 - Credentials/passwords classifier
 - Optimizer that improves the classifier with GEPA/MIPROv2
 - A minimal DSPy demo
+- A minimal DSPy demo processing a PDF
 
 # FunctAI Intro - Simplest Example
 
+FunctAI is based on DSPy and makes python functions become typed LLM-Calls
+
 [https://github.com/MaximeRivest/functai](https://github.com/MaximeRivest/functai)
-
-This repository contains runnable FunctAI examples:
-
-- A minimal FunctAI demo
 
 ## Requirements
 
@@ -48,6 +47,9 @@ Console scripts are defined in pyproject.toml:
 # Minimal DSPy example
 uv run simplestdspy
 
+# Minimal DSPy example processing a PDF
+uv run simplestdspyattach
+
 # Minimal FunctAI example
 uv run simplestfunctai
 
@@ -67,7 +69,8 @@ uv run optimizer
 └── src
     ├── simplest
     │   ├── simplest_dspy.py     # minimal DSPy example
-    │   ├── simplest_functai.py  # minimal FunctAI example
+    │   ├── simplest_dspy_with_attachments.py # minimal DSPy example processing a PDF
+    │   └── simplest_functai.py  # minimal FunctAI example
     ├── common
     │   ├── constants.py      # model names
     │   ├── mlflow_utils.py   # MLflow helpers

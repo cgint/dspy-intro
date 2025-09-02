@@ -6,6 +6,8 @@ dependencies = [
     "google-generativeai",
     "dspy-ai",
     "mlflow",
+    "attachments",
+    "pydantic",
     "functai"
 ]
 
@@ -33,4 +35,5 @@ where = ["src"]
 optimizer = "classifier_credentials.dspy_agent_classifier_credentials_passwords_optimized:main"
 password = "classifier_credentials.dspy_agent_classifier_credentials_passwords:main"
 simplestdspy = "simplest.simplest_dspy:main"
+simplestdspyattach = "simplest.simplest_dspy_with_attachments:main"
 simplestfunctai = "simplest.simplest_functai:main"
