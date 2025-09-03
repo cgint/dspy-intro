@@ -184,8 +184,8 @@ uv run extractgrammatical
     │   ├── simplest_dspy_with_attachments.py  # minimal DSPy example processing a PDF
     │   └── simplest_functai.py                # minimal FunctAI example
     ├── text_component_extract
-    │   ├── extract_prompt_parts_101_guide.py    # prompt component extraction
-    │   └── extract_sentence_parts_noun_verb.py  # grammatical component extraction
+    │   ├── extract_prompt_parts_101_guide.py      # prompt component extraction
+    │   └── extract_sentence_parts_grammatical.py  # grammatical component extraction
     ├── common
     │   ├── constants.py      # model names
     │   ├── mlflow_utils.py   # MLflow helpers
