@@ -37,3 +37,5 @@ password = "classifier_credentials.dspy_agent_classifier_credentials_passwords:m
 simplestdspy = "simplest.simplest_dspy:main"
 simplestdspyattach = "simplest.simplest_dspy_with_attachments:main"
 simplestfunctai = "simplest.simplest_functai:main"
+extractprompt = "text_component_extract.extract_prompt_parts_101_guide:main"
+extractgrammatical = "text_component_extract.extract_sentence_parts_grammatical:main"

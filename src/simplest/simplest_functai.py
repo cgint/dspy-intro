@@ -13,7 +13,7 @@ def joke_funnyness_factor_0_to_10(joke: str) -> int:
 def main():
     model_access_prefix = get_model_access_prefix_or_fail()
     model_name = f"{model_access_prefix}{MODEL_NAME_GEMINI_2_5_FLASH}"
-    configure(lm=model_name, temperature=0.2, adapter="json")
+    configure(lm=model_name)
 
     the_joke: str = joke_for_john()
     print(f"\n\n{the_joke}")

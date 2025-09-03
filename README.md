@@ -12,6 +12,7 @@ This repository contains runnable DSPy examples:
 ## Output of: "A minimal DSPy demo"
 
 ### Full code
+
 ```python
 import dspy
 from common.utils import get_lm_for_model_name, dspy_configure
@@ -32,16 +33,17 @@ def main():
 
     the_joke: str = joke_for_john()
     print(f"\n\n{the_joke}")
-    
+  
     funnyness: int = joke_funnyness_factor_0_to_10(the_joke)
     print(f" -> How funny is the joke on a scale of 0 to 10? {funnyness}\n")
 
 if __name__ == "__main__":
     main()
 
-``` 
+```
 
 ### Output
+
 ```
 Why did John bring a ladder to the bar? Because he heard the drinks were on the house!
  -> How funny is the joke on a scale of 0 to 10? 6
@@ -101,13 +103,23 @@ Covered topics and their importance (from 0 low to 10 high):
  - (Importance: 7) Scoring and Recommendation Agents
  - (Importance: 6) Limitations of the Study
  - (Importance: 6) Pretrained Models Used
- ```
+```
 
 # FunctAI Intro - Simplest Example
 
 FunctAI is based on DSPy and makes python functions become typed LLM-Calls
 
 [https://github.com/MaximeRivest/functai](https://github.com/MaximeRivest/functai)
+
+## Text Component Extraction
+
+### Prompt Component Extraction
+
+This example extracts the four main components of a prompt (Persona, Task, Context, Format) from a given text.
+
+### Grammatical Component Extraction
+
+This example extracts grammatical components (Subject, Verb, Object, Modifier) from a sentence.
 
 ## Requirements
 
@@ -153,6 +165,12 @@ uv run password
 
 # Credentials classifier optimization (GEPA / MIPROv2)
 uv run optimizer
+
+# Prompt component extraction
+uv run extractprompt
+
+# Grammatical component extraction
+uv run extractgrammatical
 ```
 
 ## Project Structure
@@ -162,9 +180,12 @@ uv run optimizer
 ├── README.md
 └── src
     ├── simplest
-    │   ├── simplest_dspy.py     # minimal DSPy example
-    │   ├── simplest_dspy_with_attachments.py # minimal DSPy example processing a PDF
-    │   └── simplest_functai.py  # minimal FunctAI example
+    │   ├── simplest_dspy.py                   # minimal DSPy example
+    │   ├── simplest_dspy_with_attachments.py  # minimal DSPy example processing a PDF
+    │   └── simplest_functai.py                # minimal FunctAI example
+    ├── text_component_extract
+    │   ├── extract_prompt_parts_101_guide.py    # prompt component extraction
+    │   └── extract_sentence_parts_noun_verb.py  # grammatical component extraction
     ├── common
     │   ├── constants.py      # model names
     │   ├── mlflow_utils.py   # MLflow helpers
