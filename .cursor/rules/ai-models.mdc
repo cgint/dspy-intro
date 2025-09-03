@@ -3,5 +3,8 @@ description:
 globs: 
 alwaysApply: true
 ---
-google gemini-1.5 are way old - 2.0 is here for long and the current state of the art is 2.5
+- NEVER use gemini-1.5-* as it is way old!
+- NEVER change the model that the user specified unless specifically asked to do so
+- The current state of the art as of 2025 is gemini-2.5-*
+- gemini-2.0-* is here for long and it is good for some cases
 
