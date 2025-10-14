@@ -3,7 +3,7 @@ name = "dspy-intro"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "dspy",
+    "dspy>=3.0.4b1",
     "mlflow",
     "attachments",
     "pydantic",
