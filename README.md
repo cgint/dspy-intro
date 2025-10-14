@@ -195,3 +195,13 @@ uv run extractgrammatical
     │   ├── dspy_agent_classifier_credentials_passwords_optimized.py  # optimizer (GEPA/MIPROv2)
     │   └── dspy_agent_classifier_credentials_passwords_examples.py   # data prep & example sets
 ```
+
+# How to evaluate the MLFlow data collected by dspy
+
+```bash
+uv run mlflow server --host 127.0.0.1 --port 8182
+```
+
+Head to http://127.0.0.1:8182
+
+
