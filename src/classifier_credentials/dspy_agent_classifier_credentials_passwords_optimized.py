@@ -61,7 +61,7 @@ def optimize_classifier(optimizer_type: Literal["MIPROv2", "GEPA"], trainer_lm: 
     Optimize the classifier using DSPy optimizer
     """
     
-    print(f"🚀 Starting optimization with parameters: optimizer_type={optimizer_type}, trainer_lm={trainer_lm.model}, auto={auto}")
+    print(f"🚀 Starting optimization on {classifier_lm_model_name} with reasoning effort {classifier_lm_reasoning_effort} with parameters: optimizer_type={optimizer_type}, trainer_lm={trainer_lm.model}, auto={auto}")
     
     # Prepare data
     trainset = prepare_training_data(limit=limit_trainset, randomize=randomize_sets)
@@ -107,8 +107,9 @@ def optimize_classifier(optimizer_type: Literal["MIPROv2", "GEPA"], trainer_lm: 
         )
     
     # Compile/optimize the classifier
+    classifier = ClassifierCredentialsPasswords()
     optimized_classifier = optimizer.compile(
-        ClassifierCredentialsPasswords(),
+        classifier,
         trainset=trainset,
         valset=testset
     )
@@ -128,11 +129,29 @@ def optimize_classifier(optimizer_type: Literal["MIPROv2", "GEPA"], trainer_lm: 
     print(f"Baseline accuracy:  {baseline_score_int}%")
     print(f"Optimized accuracy: {optimized_score_int}%")
 
-    save_path = f"optimized_credentials_classifier_{int(time.time())}_{baseline_score_int}_to_{optimized_score_int}.json"
-    optimized_classifier.save(save_path)
-    print(f"\n💾 Optimized classifier saved to: {save_path}")
     
-    return optimized_classifier, save_path, baseline_score_int, optimized_score_int
+    # Save a combined metadata + program JSON
+    combined_save_path = f"optimized_credentials_classifier_{int(time.time())}_{baseline_score_int}_to_{optimized_score_int}_combined.json"
+    combined_data = {
+        "metadata": {
+            "classifier_lm_model_name": classifier_lm_model_name,
+            "classifier_lm_reasoning_effort": str(classifier_lm_reasoning_effort),
+            "optimizer_type": optimizer_type,
+            "auto": auto,
+            "baseline_accuracy": baseline_score_int,
+            "optimized_accuracy": optimized_score_int,
+            "timestamp": int(time.time()),
+            "trainset_size": limit_trainset,
+            "testset_size": limit_testset,
+        },
+        "program": optimized_classifier.dump_state()
+    }
+    import json
+    with open(combined_save_path, 'w') as f:
+        json.dump(combined_data, f, indent=2)
+    print(f"💾 Combined format saved to: {combined_save_path}")
+    
+    return optimized_classifier, combined_save_path, baseline_score_int, optimized_score_int
 
 
 def test_classifier_examples(classifier, examples_desc="", question_prefix="") -> Dict[str, str]:
@@ -170,7 +189,7 @@ def main():
         trainer_lm_model_name = MODEL_NAME_GEMINI_2_5_FLASH
         trainer_lm_reasoning_effort = "disable"
         optimizer_type = "GEPA" # "MIPROv2" # "GEPA"
-        auto = "light"  # <-- We will use a light budget for this tutorial. However, we typically recommend using auto="heavy" for optimized performance!
+        auto = "heavy"  # <-- We will use a "light" budget for this tutorial. However, we typically recommend using auto="heavy" for optimized performance!
         limit_trainset = 50
         limit_testset = 30
         randomize_sets = True
@@ -195,7 +214,7 @@ def main():
         trainer_lm = get_lm_for_model_name(trainer_lm_model_name, trainer_lm_reasoning_effort)
 
         optimizer_start_time_sec = time.time()
-        optimized_classifier, save_path, baseline_score_int, optimized_score_int = optimize_classifier(optimizer_type, trainer_lm, auto, limit_trainset, limit_testset, randomize_sets, reflection_minibatch_size)
+        optimized_classifier, combined_save_path, baseline_score_int, optimized_score_int = optimize_classifier(optimizer_type, trainer_lm, auto, limit_trainset, limit_testset, randomize_sets, reflection_minibatch_size)
         optimizer_end_time_sec = time.time()
         optimizer_duration_sec = optimizer_end_time_sec - optimizer_start_time_sec
         mlflow.log_metric("optimizer_duration_seconds", optimizer_duration_sec)
@@ -207,7 +226,7 @@ def main():
         mlflow.log_metric("baseline_accuracy", baseline_score_int)
         mlflow.log_metric("optimized_accuracy", optimized_score_int)
     
-    print(f"\n🎉 Optimization complete! Optimized model saved to: {save_path}")
+    print(f"\n🎉 Optimization complete! Optimized model + metadata saved to: {combined_save_path}")
     print(f"Baseline accuracy: {baseline_score_int}%")
     print(f"Optimized accuracy: {optimized_score_int}%")
 
