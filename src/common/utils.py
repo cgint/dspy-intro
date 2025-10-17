@@ -54,8 +54,12 @@ def get_model_access_prefix_or_fail(model_name: str) -> str:
     print(f"Using model access prefix: {selected_provider}")
     return f"{selected_provider}/"
 
-def dspy_configure(lm: dspy.LM, track_usage: bool = True):
-    dspy.settings.configure(lm=lm, track_usage=track_usage)
+def dspy_configure(lm: dspy.LM, track_usage: bool = True, adapter: dspy.Adapter = dspy.JSONAdapter()):
+    """
+    Using JSONAdapter as it is the most reliable adapter from tests.
+    XMLAdapter and ChatAdapter force retries using JSONAdapter as fallback anyways.
+    """
+    dspy.settings.configure(lm=lm, track_usage=track_usage, adapter=adapter)
     dspy.configure_cache(enable_disk_cache=False, enable_memory_cache=False)
 
 def get_lm_for_model_name(model_name: str, reasoning_effort: Literal["low", "medium", "high", "disable"] | None = "disable", max_tokens: int = 8192, temperature: float = 0.3) -> dspy.LM:
