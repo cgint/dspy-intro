@@ -48,7 +48,7 @@ class ClassificationAccuracyWithFeedbackMetric(GEPAFeedbackMetric):
 		return ScoreWithFeedback(score=total, feedback=feedback)
 
 
-# --- MIPROv2 Optimization ---
+# --- Optimization ---
 
 def to_percent_int(input: Any) -> int:
     if isinstance(input, float):
@@ -58,10 +58,10 @@ def to_percent_int(input: Any) -> int:
 
 def optimize_classifier(optimizer_type: Literal["MIPROv2", "GEPA"], trainer_lm: dspy.LM, auto: Literal["light", "medium", "heavy"], limit_trainset: int, limit_testset: int, randomize_sets: bool, reflection_minibatch_size: int):
     """
-    Optimize the classifier using DSPy MIPROv2
+    Optimize the classifier using DSPy optimizer
     """
     
-    print(f"🚀 Starting MIPROv2 optimization with parameters: optimizer_type={optimizer_type}, trainer_lm={trainer_lm.model}, auto={auto}")
+    print(f"🚀 Starting optimization with parameters: optimizer_type={optimizer_type}, trainer_lm={trainer_lm.model}, auto={auto}")
     
     # Prepare data
     trainset = prepare_training_data(limit=limit_trainset, randomize=randomize_sets)
@@ -80,9 +80,9 @@ def optimize_classifier(optimizer_type: Literal["MIPROv2", "GEPA"], trainer_lm: 
     )(ClassifierCredentialsPasswords())
     print(f"Baseline accuracy: {to_percent_int(baseline_score.score)}%")
     
-    # Initialize MIPROv2 optimizer
+    # Initialize optimizer
     # Using "light" for fast optimization, can try "medium" or "heavy" for better results
-    print("\n🔧 Running MIPROv2 optimization...")
+    print(f"\n🔧 Running {optimizer_type} optimization...")
     print("This may take a few minutes...")
     
     if optimizer_type == "MIPROv2":
