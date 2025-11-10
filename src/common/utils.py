@@ -13,11 +13,9 @@ def get_model_access_prefix_or_fail(model_name: str) -> str:
 
     Returns e.g. "" or "gemini/" or "vertex_ai/"
     """
-    if "/" not in model_name:
-        return ""
-    provider_from_model_name: str = model_name.split("/")[0]
-    if provider_from_model_name not in GOOGLE_PROVIDER_LIST:
-        return ""
+    provider_from_model_name: str | None = model_name.split("/")[0] if "/" in model_name else None
+    if provider_from_model_name is not None and provider_from_model_name not in GOOGLE_PROVIDER_LIST:
+        return "" # In this case the model name already contains the provider and it is one we use as is
 
     # Collect state: what credentials are available
     has_vertex_ai_env_vars = os.getenv("VERTEXAI_PROJECT") and os.getenv("VERTEXAI_LOCATION")
@@ -25,11 +23,11 @@ def get_model_access_prefix_or_fail(model_name: str) -> str:
     
     selected_provider: str | None = None
     # Evaluate based on model name and available credentials
-    if provider_from_model_name == GOOGLE_PROVIDER_VERTEX_AI:
+    if provider_from_model_name is not None and provider_from_model_name == GOOGLE_PROVIDER_VERTEX_AI:
         if not has_vertex_ai_env_vars:
             raise ValueError(f"Both VERTEXAI_PROJECT and VERTEXAI_LOCATION must be set as environment variables for {GOOGLE_PROVIDER_VERTEX_AI} prefix")
         selected_provider = provider_from_model_name
-    elif provider_from_model_name == GOOGLE_PROVIDER_GEMINI:
+    elif provider_from_model_name is not None and provider_from_model_name == GOOGLE_PROVIDER_GEMINI:
         if not has_gemini_env_vars:
             raise ValueError(f"GEMINI_API_KEY must be set as environment variable for {GOOGLE_PROVIDER_GEMINI} prefix")
         selected_provider = provider_from_model_name
