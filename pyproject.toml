@@ -8,7 +8,10 @@ dependencies = [
     "mlflow",
     "attachments",
     "pydantic",
-    "functai"
+    "functai",
+    "networkx",
+    "matplotlib",
+    "pyvis"
 ]
 
 [dependency-groups]
