@@ -82,7 +82,7 @@ def save_graph_as_html(G: nx.DiGraph, output_file: str = "knowledge_graph.html")
         height="800px",
         width="100%",
         bgcolor="#222222",
-        font_color="white",
+        font_color=True,
         directed=True,
         notebook=False
     )
