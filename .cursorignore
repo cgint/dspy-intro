@@ -1,5 +1,6 @@
 mlruns/
 *.json
+lib/
 
 # Do not add ignores specific to your repository here.
 # Add them in a files named .extra_repo_ignores in your repository instead.
@@ -43,6 +44,7 @@ application*.yml
 # Test output files
 test-logs/
 test-results/
+mlruns/
 playwright-report/
 
 !.aider.conf.yml
@@ -51,6 +53,8 @@ playwright-report/
 .env
 *.env.yaml
 # *_codegiant_*
+.codegiant/
+.claude/
 
 *.log
 *.tar.gz
