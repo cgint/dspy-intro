@@ -1,6 +1,11 @@
 import os
 import dspy
 from typing import Literal
+from common.constants import (
+    OLLAMA_MODEL,
+    OLLAMA_OPENAI_BASE_URL,
+    OLLAMA_OPENAI_API_KEY,
+)
 GOOGLE_PROVIDER_GEMINI = "gemini"
 GOOGLE_PROVIDER_VERTEX_AI = "vertex_ai"
 GOOGLE_PROVIDER_LIST = [GOOGLE_PROVIDER_GEMINI, GOOGLE_PROVIDER_VERTEX_AI]
@@ -67,4 +72,43 @@ def get_lm_for_model_name(model_name: str, reasoning_effort: Literal["low", "med
         max_tokens=max_tokens, temperature=temperature,
         reasoning_effort=reasoning_effort if reasoning_effort is not None else None,
         # thinking={"type": "enabled", "budget_tokens": 512}
+    )
+
+def get_lm_for_ollama(
+    model_name: str | None = None,
+    api_base_url: str | None = None,
+    api_key: str | None = None,
+    reasoning_effort: Literal["low", "medium", "high", "disable"] | None = "disable",
+    max_tokens: int = 8192,
+    temperature: float = 0.3
+) -> dspy.LM:
+    """
+    Get DSPy LM for Ollama using OpenAI-compatible API.
+    
+    Args:
+        model_name: Ollama model name (defaults to OLLAMA_MODEL from constants)
+        api_base_url: Base URL for OpenAI-compatible API (defaults to OLLAMA_OPENAI_BASE_URL)
+        api_key: API key placeholder (defaults to OLLAMA_OPENAI_API_KEY)
+        reasoning_effort: Reasoning effort level
+        max_tokens: Maximum tokens
+        temperature: Temperature setting
+    """
+    selected_model = model_name if model_name else OLLAMA_MODEL
+    selected_base_url = api_base_url if api_base_url else OLLAMA_OPENAI_BASE_URL
+    selected_api_key = api_key if api_key else OLLAMA_OPENAI_API_KEY
+    
+    # Set environment variables for OpenAI-compatible API
+    os.environ["OPENAI_API_KEY"] = selected_api_key
+    os.environ["OPENAI_BASE_URL"] = selected_base_url
+    # Use the root base URL (without /v1) for Ollama provider
+    if selected_base_url.endswith("/v1"):
+        os.environ["OLLAMA_BASE_URL"] = selected_base_url[:-3]
+    else:
+        os.environ["OLLAMA_BASE_URL"] = selected_base_url
+    
+    return dspy.LM(
+        model=f"ollama/{selected_model}",
+        max_tokens=max_tokens,
+        temperature=temperature,
+        reasoning_effort=reasoning_effort if reasoning_effort is not None else None,
     )

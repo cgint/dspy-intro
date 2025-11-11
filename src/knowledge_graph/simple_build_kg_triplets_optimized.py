@@ -4,8 +4,8 @@ import json
 import dspy
 from dspy.teleprompt.gepa.gepa import GEPAFeedbackMetric
 from dspy.teleprompt.gepa.gepa_utils import ScoreWithFeedback
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH, MODEL_NAME_GEMINI_2_5_PRO
-from common.utils import dspy_configure, get_lm_for_model_name
+from common.utils import dspy_configure, get_lm_for_ollama, get_lm_for_model_name
+from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
 
 # Import from examples file
 from knowledge_graph.dspy_agent_triplet_extraction_examples import (
@@ -219,21 +219,21 @@ def test_extractor_examples(extractor, examples_desc="", text_prefix=""):
 
 
 def main():
-    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable"))
+    # Configure DSPy with Ollama for the model being trained
+    dspy_configure(get_lm_for_ollama())
     
     # Configuration
-    trainer_lm_model_name = MODEL_NAME_GEMINI_2_5_FLASH
     trainer_lm_reasoning_effort = "disable"
-    judge_lm_model_name = MODEL_NAME_GEMINI_2_5_PRO
-    judge_lm_reasoning_effort = "low"
-    auto = "light"  # Options: "light", "medium", "heavy"
+    judge_lm_reasoning_effort = "disable"
+    auto = "heavy"  # Options: "light", "medium", "heavy"
     limit_trainset = 1000
-    limit_testset = 5
+    limit_testset = 3
     randomize_sets = True
     reflection_minibatch_size = limit_testset  # Used in GEPA - when too low then it can loop on seemingly perfect proposed candidates
     
-    trainer_lm = get_lm_for_model_name(trainer_lm_model_name, trainer_lm_reasoning_effort)
-    judge_lm = get_lm_for_model_name(judge_lm_model_name, judge_lm_reasoning_effort)
+    # Trainer and judge use Gemini Flash
+    trainer_lm = get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, trainer_lm_reasoning_effort)
+    judge_lm = get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, judge_lm_reasoning_effort)
     
     _, combined_save_path, baseline_score_int, optimized_score_int = optimize_triplet_extractor(
         trainer_lm, judge_lm, auto, limit_trainset, limit_testset, randomize_sets, reflection_minibatch_size

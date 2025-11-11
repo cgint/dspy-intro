@@ -6,8 +6,7 @@ import networkx as nx
 from pathlib import Path
 from pyvis.network import Network
 
-from common.utils import get_lm_for_model_name, dspy_configure
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.utils import get_lm_for_ollama, dspy_configure
 
 
 # 1. Define the structured output with Pydantic
@@ -119,7 +118,7 @@ def save_graph_as_html(G: nx.DiGraph, output_file: str = "knowledge_graph.html")
 
 def main():
     # Configure DSPy
-    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable"))
+    dspy_configure(get_lm_for_ollama())
     
     # Read the markdown file
     file_path = Path("src/simplest/docs/images/notes-on-linear-and-ai-agents.md")
@@ -135,7 +134,7 @@ def main():
     print(f"File read successfully ({len(text)} characters)")
     
     # Create extractor and extract triplets
-    print("\nExtracting triplets using DSPy...")
+    print(f"\nExtracting triplets using model: {dspy.settings.lm.model}...")
     extractor = TripletExtractor()
     triplets = extract_triplets_from_text(text, extractor)
     
