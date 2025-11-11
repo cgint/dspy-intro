@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 import json
 import dspy
 import pydantic
@@ -28,11 +28,17 @@ class TripletExtractionSignature(dspy.Signature):
     Each triplet represents a meaningful relationship between entities.
     Extract all significant relationships, concepts, and connections mentioned in the text.
     Focus on concrete relationships rather than abstract concepts.
+    
+    If existing_triplets are provided, relate new triplets to existing ones where applicable.
+    Use the same entity names as in existing triplets when referring to the same concepts.
+    Avoid extracting duplicate triplets that already exist.
+    
     Return the result as a JSON object with a "triplets" field containing a list of triplets.
     Each triplet should have "subject", "predicate", and "object" fields.
     """
 
     text: str = dspy.InputField(desc="The source text to analyze for knowledge graph triplets")
+    existing_triplets: str = dspy.InputField(desc="JSON string of previously extracted triplets to relate to, or empty string if none", default="")
     result: TripletsResult = dspy.OutputField(desc="A JSON object with a 'triplets' field containing a list of extracted triplets")
 
 
@@ -42,13 +48,31 @@ class TripletExtractor(dspy.Module):
         super().__init__()
         self.predictor = dspy.Predict(TripletExtractionSignature)
 
-    def forward(self, text: str) -> dspy.Prediction:
-        return self.predictor(text=text)
+    def forward(self, text: str, existing_triplets: str = "") -> dspy.Prediction:
+        return self.predictor(text=text, existing_triplets=existing_triplets)
 
 
-def extract_triplets_from_text(text: str, extractor: TripletExtractor) -> List[Triplet]:
-    """Extract triplets from text using the DSPy extractor."""
-    result = extractor(text=text)
+def format_triplets_for_context(triplets: List[Triplet]) -> str:
+    """Format triplets as a JSON string for use as context in the extraction signature."""
+    if not triplets:
+        return ""
+    
+    triplet_dicts = [
+        {
+            "subject": triplet.subject,
+            "predicate": triplet.predicate,
+            "object": triplet.object
+        }
+        for triplet in triplets
+    ]
+    return json.dumps(triplet_dicts, ensure_ascii=False, indent=2)
+
+
+def extract_triplets_from_text(text: str, extractor: TripletExtractor, existing_triplets: Optional[List[Triplet]] = None) -> List[Triplet]:
+    """Extract triplets from text using the DSPy extractor, with optional context of existing triplets."""
+    existing_triplets = existing_triplets or []
+    existing_triplets_json = format_triplets_for_context(existing_triplets)
+    result = extractor(text=text, existing_triplets=existing_triplets_json)
     return result.result.triplets
 
 
@@ -149,7 +173,10 @@ def main():
     
     for chunk in chunks:
         print(f"\n  Processing chunk {chunk.chunk_index} ({chunk.chunk_type}, {len(chunk.content)} chars)...")
-        chunk_triplets = extract_triplets_from_text(chunk.content, extractor)
+        reused_triplets = all_triplets
+        if reused_triplets:
+            print(f"    → Using {len(reused_triplets)} existing triplets as context")
+        chunk_triplets = extract_triplets_from_text(chunk.content, extractor, existing_triplets=reused_triplets) # do not use for now - testing
         print(f"    → Extracted {len(chunk_triplets)} triplets from this chunk")
         all_triplets.extend(chunk_triplets)
     

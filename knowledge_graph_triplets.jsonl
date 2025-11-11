@@ -1,12 +1,35 @@
-{"subject": "Linear", "predicate": "starts with", "object": "manual workflows"}
-{"subject": "Linear", "predicate": "reaches", "object": "enlightenment of automation"}
-{"subject": "Linear", "predicate": "uses", "object": "automatic triaging system"}
-{"subject": "Linear", "predicate": "works", "object": "in the background"}
-{"subject": "Linear", "predicate": "is", "object": "communication tool"}
-{"subject": "Linear", "predicate": "enhances", "object": "product development cycle"}
-{"subject": "Linear", "predicate": "mandates", "object": "human ownership"}
-{"subject": "Linear", "predicate": "allows", "object": "delegation of work"}
-{"subject": "Linear", "predicate": "provides", "object": "custom instructions"}
-{"subject": "Linear", "predicate": "integrates", "object": "Slack"}
-{"subject": "Linear", "predicate": "builds", "object": "custom interfaces"}
-{"subject": "Linear", "predicate": "aims", "object": "natural extension"}
+{"subject": "Linear", "predicate": "started", "object": "slow"}
+{"subject": "Linear", "predicate": "waited", "object": "until models were good enough to build real value"}
+{"subject": "Linear", "predicate": "rushed to slap", "object": "Al on everything"}
+{"subject": "Linear", "predicate": "has", "object": "automatic triaging system"}
+{"subject": "automatic triaging system", "predicate": "works", "object": "in the background"}
+{"subject": "automatic triaging system", "predicate": "takes", "object": "minutes per issue"}
+{"subject": "automatic triaging system", "predicate": "finds", "object": "duplicates"}
+{"subject": "automatic triaging system", "predicate": "provides", "object": "context"}
+{"subject": "automatic triaging system", "predicate": "does not require", "object": "user awareness"}
+{"subject": "Linear", "predicate": "is", "object": "a communication tool"}
+{"subject": "Linear", "predicate": "enhances", "object": "each step of the product development cycle"}
+{"subject": "product development cycle", "predicate": "flows through", "object": "discovery, planning, building, and shipping"}
+{"subject": "human ownership", "predicate": "maintain", "object": "Al agents"}
+{"subject": "Linear mandates", "predicate": "delegate", "object": "coding agents"}
+{"subject": "Linear mandates", "predicate": "maintain", "object": "accountability"}
+{"subject": "Linear mandates", "predicate": "leverage", "object": "automation"}
+{"subject": "Custom Instructions", "predicate": "are important for", "object": "exceptional AI"}
+{"subject": "Linear", "predicate": "provides", "object": "custom instructions for AI tools"}
+{"subject": "Custom instructions", "predicate": "allow", "object": "appending prompts with company-specific language and workflows"}
+{"subject": "Linear", "predicate": "has_slack_agent", "object": "Slack"}
+{"subject": "Slack", "predicate": "is_where_work_happens", "object": "internal_workflows"}
+{"subject": "Linear", "predicate": "changed", "object": "internal_workflows"}
+{"subject": "Slack", "predicate": "has_real_discussions", "object": "conversations"}
+{"subject": "Al", "predicate": "needs proper representation in", "object": "the Ul"}
+{"subject": "Linear", "predicate": "building custom interfaces and concepts", "object": "to make the experience more agent-native"}
+{"subject": "Al", "predicate": "integrate into workflows", "object": "properly"}
+{"subject": "Linear", "predicate": "evolved from", "object": "basic keyword search"}
+{"subject": "Linear", "predicate": "evolved to", "object": "semantic search"}
+{"subject": "Linear", "predicate": "evolved to", "object": "full agentic loops"}
+{"subject": "You", "predicate": "can't automate", "object": "what you don't understand"}
+{"subject": "You", "predicate": "need to do things manually", "object": "before you can effectively delegate to machines"}
+{"subject": "Linear", "predicate": "orchestrates workflows", "object": "you command one agent that then delegates to other agents"}
+{"subject": "Linear", "predicate": "aims to be", "object": "a natural extension of your existing processes"}
+{"subject": "Linear", "predicate": "adapts to", "object": "how you communicate"}
+{"subject": "Linear", "predicate": "does not dictate", "object": "how you should work"}
