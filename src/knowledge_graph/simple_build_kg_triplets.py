@@ -7,6 +7,7 @@ from pathlib import Path
 from pyvis.network import Network
 
 from common.utils import get_lm_for_ollama, dspy_configure
+from knowledge_graph.markdown_splitter import TextChunk, split_markdown_into_chunks
 
 
 # 1. Define the structured output with Pydantic
@@ -133,23 +134,37 @@ def main():
     
     print(f"File read successfully ({len(text)} characters)")
     
-    # Create extractor and extract triplets
+    # Split markdown into chunks
+    print("\nSplitting markdown into chunks...")
+    chunks: List[TextChunk] = split_markdown_into_chunks(text, strategy="headers_first")
+    print(f"Split into {len(chunks)} chunks:")
+    for chunk in chunks:
+        header_info = f" (under: {chunk.header_context})" if chunk.header_context else ""
+        print(f"  Chunk {chunk.chunk_index}: {chunk.chunk_type} ({len(chunk.content)} chars){header_info}")
+    
+    # Create extractor and extract triplets from each chunk
     print(f"\nExtracting triplets using model: {dspy.settings.lm.model}...")
     extractor = TripletExtractor()
-    triplets = extract_triplets_from_text(text, extractor)
+    all_triplets: List[Triplet] = []
     
-    print(f"\nExtracted {len(triplets)} triplets:")
-    for i, triplet in enumerate(triplets, 1):
+    for chunk in chunks:
+        print(f"\n  Processing chunk {chunk.chunk_index} ({chunk.chunk_type}, {len(chunk.content)} chars)...")
+        chunk_triplets = extract_triplets_from_text(chunk.content, extractor)
+        print(f"    → Extracted {len(chunk_triplets)} triplets from this chunk")
+        all_triplets.extend(chunk_triplets)
+    
+    print(f"\nTotal extracted {len(all_triplets)} triplets from {len(chunks)} chunks:")
+    for i, triplet in enumerate(all_triplets, 1):
         print(f"  {i}. ({triplet.subject}, {triplet.predicate}, {triplet.object})")
     
     # Save triplets as JSONL
     print("\nSaving triplets as JSONL...")
     jsonl_file = "knowledge_graph_triplets.jsonl"
-    save_triplets_as_jsonl(triplets, jsonl_file)
+    save_triplets_as_jsonl(all_triplets, jsonl_file)
     
     # Build NetworkX graph
     print("\nBuilding NetworkX graph...")
-    G = build_networkx_graph(triplets)
+    G = build_networkx_graph(all_triplets)
     print(f"Graph created with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
     
     # Save graph as HTML

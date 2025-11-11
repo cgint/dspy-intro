@@ -1,12 +1,12 @@
-{"subject": "Linear", "predicate": "has_feature", "object": "automatic triaging system"}
-{"subject": "Linear", "predicate": "uses", "object": "Slack"}
-{"subject": "Linear", "predicate": "provides", "object": "custom instructions"}
-{"subject": "Linear", "predicate": "enables", "object": "agent orchestration"}
-{"subject": "Linear", "predicate": "evolved_from", "object": "basic keyword search"}
-{"subject": "Linear", "predicate": "supports", "object": "manual workflows"}
-{"subject": "Linear", "predicate": "integrates_with", "object": "Slack"}
-{"subject": "Linear", "predicate": "maintains", "object": "human ownership"}
+{"subject": "Linear", "predicate": "starts with", "object": "manual workflows"}
+{"subject": "Linear", "predicate": "reaches", "object": "enlightenment of automation"}
+{"subject": "Linear", "predicate": "uses", "object": "automatic triaging system"}
+{"subject": "Linear", "predicate": "works", "object": "in the background"}
+{"subject": "Linear", "predicate": "is", "object": "communication tool"}
 {"subject": "Linear", "predicate": "enhances", "object": "product development cycle"}
-{"subject": "Linear", "predicate": "allows", "object": "delegation of tasks"}
-{"subject": "Linear", "predicate": "uses", "object": "semantic search"}
-{"subject": "Linear", "predicate": "builds", "object": "agent-native interfaces"}
+{"subject": "Linear", "predicate": "mandates", "object": "human ownership"}
+{"subject": "Linear", "predicate": "allows", "object": "delegation of work"}
+{"subject": "Linear", "predicate": "provides", "object": "custom instructions"}
+{"subject": "Linear", "predicate": "integrates", "object": "Slack"}
+{"subject": "Linear", "predicate": "builds", "object": "custom interfaces"}
+{"subject": "Linear", "predicate": "aims", "object": "natural extension"}
