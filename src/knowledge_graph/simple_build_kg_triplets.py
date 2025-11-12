@@ -6,7 +6,8 @@ import networkx as nx
 from pathlib import Path
 from pyvis.network import Network
 
-from common.utils import get_lm_for_ollama, dspy_configure
+from common.utils import get_lm_for_ollama, get_lm_for_model_name, dspy_configure
+from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
 from knowledge_graph.markdown_splitter import TextChunk, split_markdown_into_chunks
 
 
@@ -23,19 +24,19 @@ class TripletsResult(pydantic.BaseModel):
 
 # 2. Define the DSPy Signature
 class TripletExtractionSignature(dspy.Signature):
-    """
-    Extract knowledge graph triplets (subject-predicate-object) from the given text.
-    Each triplet represents a meaningful relationship between entities.
-    Extract all significant relationships, concepts, and connections mentioned in the text.
-    Focus on concrete relationships rather than abstract concepts.
+    # """
+    # Extract knowledge graph triplets (subject-predicate-object) from the given text.
+    # Each triplet represents a meaningful relationship between entities.
+    # Extract all significant relationships, concepts, and connections mentioned in the text.
+    # Focus on concrete relationships rather than abstract concepts.
     
-    If existing_triplets are provided, relate new triplets to existing ones where applicable.
-    Use the same entity names as in existing triplets when referring to the same concepts.
-    Avoid extracting duplicate triplets that already exist.
+    # If existing_triplets are provided, relate new triplets to existing ones where applicable.
+    # Use the same entity names as in existing triplets when referring to the same concepts.
+    # Avoid extracting duplicate triplets that already exist.
     
-    Return the result as a JSON object with a "triplets" field containing a list of triplets.
-    Each triplet should have "subject", "predicate", and "object" fields.
-    """
+    # Return the result as a JSON object with a "triplets" field containing a list of triplets.
+    # Each triplet should have "subject", "predicate", and "object" fields.
+    # """
 
     text: str = dspy.InputField(desc="The source text to analyze for knowledge graph triplets")
     existing_triplets: str = dspy.InputField(desc="JSON string of previously extracted triplets to relate to, or empty string if none", default="")
@@ -105,7 +106,7 @@ def save_graph_as_html(G: nx.DiGraph, output_file: str = "knowledge_graph.html")
     net = Network(
         height="800px",
         width="100%",
-        bgcolor="#222222",
+        bgcolor="white",
         font_color=True,
         directed=True,
         notebook=False
@@ -143,7 +144,8 @@ def save_graph_as_html(G: nx.DiGraph, output_file: str = "knowledge_graph.html")
 
 def main():
     # Configure DSPy
-    dspy_configure(get_lm_for_ollama())
+    # dspy_configure(get_lm_for_ollama())
+    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable"))
     
     # Read the markdown file
     file_path = Path("src/simplest/docs/images/notes-on-linear-and-ai-agents.md")
