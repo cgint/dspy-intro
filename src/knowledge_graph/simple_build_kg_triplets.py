@@ -6,7 +6,7 @@ import networkx as nx
 from pathlib import Path
 from pyvis.network import Network
 
-from common.utils import get_lm_for_ollama, get_lm_for_model_name, dspy_configure
+from common.utils import get_lm_for_model_name, dspy_configure
 from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
 from knowledge_graph.markdown_splitter import TextChunk, split_markdown_into_chunks
 
