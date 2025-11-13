@@ -11,7 +11,7 @@ def joke_funnyness_factor_0_to_10(joke: str) -> int:
     return _ai  # type: ignore[return-value]
 
 def main():
-    model_access_prefix = get_model_access_prefix_or_fail()
+    model_access_prefix = get_model_access_prefix_or_fail(MODEL_NAME_GEMINI_2_5_FLASH)
     model_name = f"{model_access_prefix}{MODEL_NAME_GEMINI_2_5_FLASH}"
     configure(lm=model_name)
 
