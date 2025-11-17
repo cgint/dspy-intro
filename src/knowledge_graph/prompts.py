@@ -13,8 +13,12 @@ TRIPLET_COMPANY_RELATIONS_INSTRUCTIONS = """
 Extract knowledge graph triplets that describe relationships between companies or organizations (partnerships, acquisitions, competition, supplier/customer relations, joint ventures, etc.). Ignore purely technological relationships unless they directly describe an interaction between companies.
 """
 
-PROMPTS: Dict[str, str] = {
-    "GENERAL": TRIPLET_GENERAL_EXTRACTOR_INSTRUCTIONS,
+TRIPLET_PEOPLE_RELATIONS_INSTRUCTIONS = """
+Extract knowledge graph triplets that describe relationships between people (individuals, roles, teams). Focus on reporting lines, responsibilities, collaborations, ownership, or delegation between humans. Ignore purely technological or company-to-company relationships unless a person is directly involved.
+"""
+
+MULTI_DIMENSION_PROMPTS: Dict[str, str] = {
     "TECH_RELATIONS": TRIPLET_TECH_RELATIONS_INSTRUCTIONS,
     "COMPANY_RELATIONS": TRIPLET_COMPANY_RELATIONS_INSTRUCTIONS,
+    "PEOPLE_RELATIONS": TRIPLET_PEOPLE_RELATIONS_INSTRUCTIONS,
 }

@@ -9,7 +9,7 @@ from pyvis.network import Network
 from common.utils import get_lm_for_model_name, dspy_configure
 from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
 from knowledge_graph.markdown_splitter import TextChunk, split_markdown_into_chunks
-from knowledge_graph.prompts import TRIPLET_GENERAL_EXTRACTOR_INSTRUCTIONS
+from knowledge_graph.prompts import MULTI_DIMENSION_PROMPTS
 
 
 # 1. Define the structured output with Pydantic
@@ -30,7 +30,6 @@ class TripletExtractionSignature(dspy.Signature):
     text: str = dspy.InputField(desc="The source text to analyze for knowledge graph triplets")
     existing_triplets: str = dspy.InputField(desc="JSON string of previously extracted triplets to relate to, or empty string if none", default="")
     result: TripletsResult = dspy.OutputField(desc="A JSON object with a 'triplets' field containing a list of extracted triplets")
-
 
 
 def extract_triplets_from_text(text: str, extractor: dspy.Module, existing_triplets: Optional[List[Triplet]] = None) -> List[Triplet]:
@@ -130,42 +129,43 @@ def main():
         header_info = f" (under: {chunk.header_context})" if chunk.header_context else ""
         print(f"  Chunk {chunk.chunk_index}: {chunk.chunk_type} ({len(chunk.content)} chars){header_info}")
     
-    # Create extractor and extract triplets from each chunk for every prompt
-    print(f"\n=== Extracting triplets for prompt 'GENERAL' using model: {dspy.settings.lm.model} ===")
-    extractor = dspy.Predict(TripletExtractionSignature.with_instructions(TRIPLET_GENERAL_EXTRACTOR_INSTRUCTIONS))
-    all_triplets: List[Triplet] = []
-    
-    for chunk in chunks:
-        print(f"\n  Processing chunk {chunk.chunk_index} ({chunk.chunk_type}, {len(chunk.content)} chars)...")
-        reused_triplets = all_triplets
-        if reused_triplets:
-            print(f"    → Using {len(reused_triplets)} existing triplets as context")
-        chunk_triplets = extract_triplets_from_text(
-            chunk.content,
-            extractor,
-            existing_triplets=reused_triplets
-        )
-        print(f"    → Extracted {len(chunk_triplets)} triplets from this chunk")
-        all_triplets.extend(chunk_triplets)
+    # Create extractor and extract triplets from each chunk for the selected prompts
+    for prompt_key, prompt_text in MULTI_DIMENSION_PROMPTS.items():
+        print(f"\n=== Extracting triplets for prompt '{prompt_key}' using model: {dspy.settings.lm.model} ===")
+        extractor = dspy.Predict(TripletExtractionSignature.with_instructions(prompt_text))
+        all_triplets: List[Triplet] = []
         
-        print(f"\nTotal extracted {len(all_triplets)} triplets from {len(chunks)} chunks for prompt 'GENERAL':")
-        for i, triplet in enumerate(all_triplets, 1):
-            print(f"  {i}. ({triplet.subject}, {triplet.predicate}, {triplet.object})")
+        for chunk in chunks:
+            print(f"\n  Processing chunk {chunk.chunk_index} ({chunk.chunk_type}, {len(chunk.content)} chars)...")
+            reused_triplets = all_triplets
+            if reused_triplets:
+                print(f"    → Using {len(reused_triplets)} existing triplets as context")
+            chunk_triplets = extract_triplets_from_text(
+                chunk.content,
+                extractor,
+                existing_triplets=reused_triplets
+            )
+            print(f"    → Extracted {len(chunk_triplets)} triplets from this chunk")
+            all_triplets.extend(chunk_triplets)
         
-        # Save triplets as JSONL
-        print("\nSaving triplets as JSONL...")
-        jsonl_file = "knowledge_graph_triplets.jsonl"
-        save_triplets_as_jsonl(all_triplets, jsonl_file)
-        
-        # Build NetworkX graph
-        print("\nBuilding NetworkX graph...")
-        G = build_networkx_graph(all_triplets)
-        print(f"Graph created with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
-        
-        # Save graph as HTML
-        print("\nSaving graph as HTML...")
-        output_file = "knowledge_graph.html"
-        save_graph_as_html(G, output_file)
+            print(f"\nTotal extracted {len(all_triplets)} triplets from {len(chunks)} chunks for prompt '{prompt_key}':")
+            for i, triplet in enumerate(all_triplets, 1):
+                print(f"  {i}. ({triplet.subject}, {triplet.predicate}, {triplet.object})")
+            
+            # Save triplets as JSONL
+            print("\nSaving triplets as JSONL...")
+            jsonl_file = f"knowledge_graph_multi_dimension_{prompt_key}.jsonl"
+            save_triplets_as_jsonl(all_triplets, jsonl_file)
+            
+            # Build NetworkX graph
+            print("\nBuilding NetworkX graph...")
+            G = build_networkx_graph(all_triplets)
+            print(f"Graph created with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
+            
+            # Save graph as HTML
+            print("\nSaving graph as HTML...")
+            output_file = f"knowledge_graph_multi_dimension_{prompt_key}.html"
+            save_graph_as_html(G, output_file)
 
 
 if __name__ == "__main__":
