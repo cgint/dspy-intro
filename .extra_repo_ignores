@@ -1,3 +1,5 @@
 mlruns/
 *.json
 lib/
+knowledge_graph*.jsonl
+knowledge_graph*.html
