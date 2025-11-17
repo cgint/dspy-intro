@@ -1,35 +1,59 @@
-{"subject": "Linear", "predicate": "started", "object": "slow"}
-{"subject": "Linear", "predicate": "waited", "object": "until models were good enough to build real value"}
-{"subject": "Linear", "predicate": "rushed to slap", "object": "Al on everything"}
-{"subject": "Linear", "predicate": "has", "object": "automatic triaging system"}
-{"subject": "automatic triaging system", "predicate": "works", "object": "in the background"}
-{"subject": "automatic triaging system", "predicate": "takes", "object": "minutes per issue"}
-{"subject": "automatic triaging system", "predicate": "finds", "object": "duplicates"}
-{"subject": "automatic triaging system", "predicate": "provides", "object": "context"}
-{"subject": "automatic triaging system", "predicate": "does not require", "object": "user awareness"}
-{"subject": "Linear", "predicate": "is", "object": "a communication tool"}
-{"subject": "Linear", "predicate": "enhances", "object": "each step of the product development cycle"}
-{"subject": "product development cycle", "predicate": "flows through", "object": "discovery, planning, building, and shipping"}
-{"subject": "human ownership", "predicate": "maintain", "object": "Al agents"}
-{"subject": "Linear mandates", "predicate": "delegate", "object": "coding agents"}
-{"subject": "Linear mandates", "predicate": "maintain", "object": "accountability"}
-{"subject": "Linear mandates", "predicate": "leverage", "object": "automation"}
-{"subject": "Custom Instructions", "predicate": "are important for", "object": "exceptional AI"}
-{"subject": "Linear", "predicate": "provides", "object": "custom instructions for AI tools"}
-{"subject": "Custom instructions", "predicate": "allow", "object": "appending prompts with company-specific language and workflows"}
-{"subject": "Linear", "predicate": "has_slack_agent", "object": "Slack"}
-{"subject": "Slack", "predicate": "is_where_work_happens", "object": "internal_workflows"}
-{"subject": "Linear", "predicate": "changed", "object": "internal_workflows"}
-{"subject": "Slack", "predicate": "has_real_discussions", "object": "conversations"}
-{"subject": "Al", "predicate": "needs proper representation in", "object": "the Ul"}
-{"subject": "Linear", "predicate": "building custom interfaces and concepts", "object": "to make the experience more agent-native"}
-{"subject": "Al", "predicate": "integrate into workflows", "object": "properly"}
-{"subject": "Linear", "predicate": "evolved from", "object": "basic keyword search"}
-{"subject": "Linear", "predicate": "evolved to", "object": "semantic search"}
-{"subject": "Linear", "predicate": "evolved to", "object": "full agentic loops"}
-{"subject": "You", "predicate": "can't automate", "object": "what you don't understand"}
-{"subject": "You", "predicate": "need to do things manually", "object": "before you can effectively delegate to machines"}
-{"subject": "Linear", "predicate": "orchestrates workflows", "object": "you command one agent that then delegates to other agents"}
-{"subject": "Linear", "predicate": "aims to be", "object": "a natural extension of your existing processes"}
+{"subject": "manual workflows", "predicate": "precede", "object": "enlightenment of automation"}
+{"subject": "Linear", "predicate": "started", "object": "slow with AI"}
+{"subject": "Linear", "predicate": "waited until", "object": "models were good enough"}
+{"subject": "models", "predicate": "build", "object": "real value"}
+{"subject": "AI", "predicate": "makes things happen", "object": "under the hood"}
+{"subject": "Linear's automatic triaging system", "predicate": "works", "object": "in the background"}
+{"subject": "Linear's automatic triaging system", "predicate": "takes minutes per issue to find", "object": "duplicates"}
+{"subject": "Linear's automatic triaging system", "predicate": "provides", "object": "context"}
+{"subject": "Linear", "predicate": "is", "object": "communication tool"}
+{"subject": "product development cycle", "predicate": "flows through", "object": "discovery"}
+{"subject": "product development cycle", "predicate": "flows through", "object": "planning"}
+{"subject": "product development cycle", "predicate": "flows through", "object": "building"}
+{"subject": "product development cycle", "predicate": "flows through", "object": "shipping"}
+{"subject": "AI", "predicate": "enhances", "object": "each step"}
+{"subject": "AI", "predicate": "does not replace", "object": "human elements"}
+{"subject": "AI agents", "predicate": "are used by", "object": "human ownership"}
+{"subject": "human ownership", "predicate": "delegates", "object": "specific tasks"}
+{"subject": "Linear", "predicate": "mandates", "object": "person owns each issue"}
+{"subject": "person", "predicate": "can delegate work to", "object": "coding agents"}
+{"subject": "person", "predicate": "maintains", "object": "accountability"}
+{"subject": "person", "predicate": "leverages", "object": "automation"}
+{"subject": "Custom Instructions", "predicate": "are", "object": "Everything"}
+{"subject": "Custom Instructions", "predicate": "are the difference between", "object": "mediocre AI"}
+{"subject": "Custom Instructions", "predicate": "are the difference between", "object": "exceptional AI"}
+{"subject": "Linear", "predicate": "provides", "object": "custom instructions"}
+{"subject": "custom instructions", "predicate": "are for", "object": "all AI tools"}
+{"subject": "custom instructions", "predicate": "allow to append", "object": "prompts"}
+{"subject": "prompts", "predicate": "are appended with", "object": "company's specific language"}
+{"subject": "prompts", "predicate": "are appended with", "object": "workflows"}
+{"subject": "Slack", "predicate": "is where", "object": "work happens"}
+{"subject": "Linear's Slack agent", "predicate": "changed", "object": "internal workflows"}
+{"subject": "Linear's Slack agent", "predicate": "made it effortless to create", "object": "issues"}
+{"subject": "issues", "predicate": "are created from", "object": "conversations"}
+{"subject": "conversations", "predicate": "are where", "object": "real discussions happen"}
+{"subject": "AI", "predicate": "needs", "object": "proper representation"}
+{"subject": "proper representation", "predicate": "is in", "object": "UI"}
+{"subject": "Linear", "predicate": "is building", "object": "custom interfaces"}
+{"subject": "Linear", "predicate": "is building", "object": "concepts"}
+{"subject": "custom interfaces", "predicate": "make experience", "object": "agent-native"}
+{"subject": "concepts", "predicate": "make experience", "object": "agent-native"}
+{"subject": "AI", "predicate": "integrates into", "object": "workflows"}
+{"subject": "automation", "predicate": "starts with", "object": "manual processes"}
+{"subject": "Linear's approach", "predicate": "evolved from", "object": "keyword search"}
+{"subject": "Linear's approach", "predicate": "evolved to", "object": "semantic search"}
+{"subject": "Linear's approach", "predicate": "evolved to", "object": "full agentic loops"}
+{"subject": "you", "predicate": "can't automate", "object": "what you don't understand"}
+{"subject": "you", "predicate": "need to do", "object": "things manually"}
+{"subject": "things", "predicate": "can be delegated to", "object": "machines"}
+{"subject": "orchestration", "predicate": "is", "object": "next frontier"}
+{"subject": "future", "predicate": "is about", "object": "how agents work together"}
+{"subject": "Linear", "predicate": "will orchestrate", "object": "workflows"}
+{"subject": "you", "predicate": "command", "object": "one agent"}
+{"subject": "one agent", "predicate": "delegates to", "object": "other agents"}
+{"subject": "manager", "predicate": "assigns", "object": "tasks"}
+{"subject": "effective tools", "predicate": "reflect", "object": "how people work"}
+{"subject": "effective tools", "predicate": "do not force", "object": "idealized workflows"}
+{"subject": "Linear", "predicate": "aims to be", "object": "natural extension of existing processes"}
 {"subject": "Linear", "predicate": "adapts to", "object": "how you communicate"}
 {"subject": "Linear", "predicate": "does not dictate", "object": "how you should work"}
