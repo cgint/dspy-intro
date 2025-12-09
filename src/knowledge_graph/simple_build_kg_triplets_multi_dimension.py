@@ -14,25 +14,25 @@ from knowledge_graph.prompts import MULTI_DIMENSION_PROMPTS
 
 # 1. Define the structured output with Pydantic
 class Triplet(pydantic.BaseModel):
+    model_config = {"frozen": True}
     subject: str = pydantic.Field(description="The subject entity of the triplet")
     predicate: str = pydantic.Field(description="The relationship/predicate connecting subject to object")
     object: str = pydantic.Field(description="The object entity of the triplet")
 
-
 class ExistingTriplets(pydantic.BaseModel):
-    existing_triplets: List[Triplet] = pydantic.Field(description="List of knowledge graph triplets")
+    existing_triplets: set[Triplet] = pydantic.Field(description="List of knowledge graph triplets")
 
 class TripletsResult(pydantic.BaseModel):
-    triplets: List[Triplet] = pydantic.Field(description="List of knowledge graph triplets")
+    triplets: set[Triplet] = pydantic.Field(description="List of knowledge graph triplets")
 
 
 class TripletExtractionSignature(dspy.Signature):
     text: str = dspy.InputField(desc="The source text to analyze for knowledge graph triplets")
-    existing_triplets: str = dspy.InputField(desc="JSON string of previously extracted triplets to relate to, or empty string if none", default="")
+    existing_triplets: ExistingTriplets = dspy.InputField(desc="Previously extracted triplets to relate to, or empty string if none", default="")
     result: TripletsResult = dspy.OutputField(desc="A JSON object with a 'triplets' field containing a list of extracted triplets")
 
 
-def extract_triplets_from_text(text: str, extractor: dspy.Module, existing_triplets: Optional[List[Triplet]] = None) -> List[Triplet]:
+def extract_triplets_from_text(text: str, extractor: dspy.Module, existing_triplets: Optional[List[Triplet]] = None) -> set[Triplet]:
     """Extract triplets from text using the DSPy extractor, with optional context of existing triplets."""
     result = extractor(text=text, existing_triplets=ExistingTriplets(existing_triplets=existing_triplets or []))
     return result.result.triplets
@@ -133,7 +133,7 @@ def main():
     for prompt_key, prompt_text in MULTI_DIMENSION_PROMPTS.items():
         print(f"\n=== Extracting triplets for prompt '{prompt_key}' using model: {dspy.settings.lm.model} ===")
         extractor = dspy.Predict(TripletExtractionSignature.with_instructions(prompt_text))
-        all_triplets: List[Triplet] = []
+        all_triplets: set[Triplet] = set()
         
         for chunk in chunks:
             print(f"\n  Processing chunk {chunk.chunk_index} ({chunk.chunk_type}, {len(chunk.content)} chars)...")
@@ -146,7 +146,7 @@ def main():
                 existing_triplets=reused_triplets
             )
             print(f"    → Extracted {len(chunk_triplets)} triplets from this chunk")
-            all_triplets.extend(chunk_triplets)
+            all_triplets.update(chunk_triplets)
         
             print(f"\nTotal extracted {len(all_triplets)} triplets from {len(chunks)} chunks for prompt '{prompt_key}':")
             for i, triplet in enumerate(all_triplets, 1):
