@@ -32,6 +32,13 @@ class TripletExtractionSignature(dspy.Signature):
     result: TripletsResult = dspy.OutputField(desc="A JSON object with a 'triplets' field containing a list of extracted triplets")
 
 
+class TripletExtractor(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.predictor = dspy.Predict(TripletExtractionSignature.with_instructions(TRIPLET_GENERAL_EXTRACTOR_INSTRUCTIONS))
+
+    def forward(self, text: str, existing_triplets: str = "") -> dspy.Prediction:
+        return self.predictor(text=text, existing_triplets=existing_triplets)
 
 def extract_triplets_from_text(text: str, extractor: dspy.Module, existing_triplets: Optional[List[Triplet]] = None) -> List[Triplet]:
     """Extract triplets from text using the DSPy extractor, with optional context of existing triplets."""
@@ -132,7 +139,7 @@ def main():
     
     # Create extractor and extract triplets from each chunk for every prompt
     print(f"\n=== Extracting triplets for prompt 'GENERAL' using model: {dspy.settings.lm.model} ===")
-    extractor = dspy.Predict(TripletExtractionSignature.with_instructions(TRIPLET_GENERAL_EXTRACTOR_INSTRUCTIONS))
+    extractor = TripletExtractor()
     all_triplets: List[Triplet] = []
     
     for chunk in chunks:
