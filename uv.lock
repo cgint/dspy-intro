@@ -517,7 +517,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "attachments" },
-    { name = "dspy", specifier = ">=3.0.4" },
+    { name = "dspy" },
     { name = "functai" },
     { name = "google-cloud-aiplatform" },
     { name = "matplotlib" },
@@ -531,7 +531,7 @@ requires-dist = [
 dev = [
     { name = "mypy" },
     { name = "pytest" },
-    { name = "ruff", specifier = ">=0.12.4" },
+    { name = "ruff" },
     { name = "types-markdown" },
     { name = "types-protobuf" },
     { name = "types-psutil" },
