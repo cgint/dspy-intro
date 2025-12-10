@@ -41,13 +41,13 @@ class TripletExtractor(dspy.Module):
     def forward(self, text: str, existing_triplets: str = "") -> dspy.Prediction:
         return self.predictor(text=text, existing_triplets=existing_triplets)
 
-def extract_triplets_from_text(text: str, extractor: dspy.Module, existing_triplets: Optional[List[Triplet]] = None) -> set[Triplet]:
+def extract_triplets_from_text(text: str, extractor: dspy.Module, existing_triplets: Optional[set[Triplet]] = None) -> set[Triplet]:
     """Extract triplets from text using the DSPy extractor, with optional context of existing triplets."""
-    result = extractor(text=text, existing_triplets=ExistingTriplets(existing_triplets=existing_triplets or []))
+    result = extractor(text=text, existing_triplets=ExistingTriplets(existing_triplets=existing_triplets or set()))
     return result.result.triplets
 
 
-def build_networkx_graph(triplets: List[Triplet]) -> nx.DiGraph:
+def build_networkx_graph(triplets: set[Triplet]) -> nx.DiGraph:
     """Build a NetworkX directed graph from extracted triplets."""
     G = nx.DiGraph()
     

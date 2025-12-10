@@ -32,13 +32,13 @@ class TripletExtractionSignature(dspy.Signature):
     result: TripletsResult = dspy.OutputField(desc="A JSON object with a 'triplets' field containing a list of extracted triplets")
 
 
-def extract_triplets_from_text(text: str, extractor: dspy.Module, existing_triplets: Optional[List[Triplet]] = None) -> set[Triplet]:
+def extract_triplets_from_text(text: str, extractor: dspy.Module, existing_triplets: Optional[set[Triplet]] = None) -> set[Triplet]:
     """Extract triplets from text using the DSPy extractor, with optional context of existing triplets."""
-    result = extractor(text=text, existing_triplets=ExistingTriplets(existing_triplets=existing_triplets or []))
+    result = extractor(text=text, existing_triplets=ExistingTriplets(existing_triplets=existing_triplets or set()))
     return result.result.triplets
 
 
-def build_networkx_graph(triplets: List[Triplet]) -> nx.DiGraph:
+def build_networkx_graph(triplets: set[Triplet]) -> nx.DiGraph:
     """Build a NetworkX directed graph from extracted triplets."""
     G = nx.DiGraph()
     
@@ -48,7 +48,7 @@ def build_networkx_graph(triplets: List[Triplet]) -> nx.DiGraph:
     return G
 
 
-def save_triplets_as_jsonl(triplets: List[Triplet], output_file: str = "knowledge_graph_triplets.jsonl"):
+def save_triplets_as_jsonl(triplets: set[Triplet], output_file: str = "knowledge_graph_triplets.jsonl"):
     """Save triplets as a JSONL file (one JSON object per line)."""
     with open(output_file, 'w', encoding='utf-8') as f:
         for triplet in triplets:

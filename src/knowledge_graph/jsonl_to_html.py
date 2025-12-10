@@ -11,7 +11,6 @@ Example CLI usage:
 """
 from __future__ import annotations
 
-from typing import List
 from pathlib import Path
 import json
 import argparse
@@ -23,12 +22,12 @@ from knowledge_graph.simple_build_kg_triplets import (
 )
 
 
-def load_triplets_from_jsonl(jsonl_path: str | Path) -> List[Triplet]:
+def load_triplets_from_jsonl(jsonl_path: str | Path) -> set[Triplet]:
     """Load triplets from a JSONL file into Triplet objects."""
     path = Path(jsonl_path)
     if not path.exists():
         raise FileNotFoundError(f"Triplets file not found: {path}")
-    triplets: List[Triplet] = []
+    triplets: set[Triplet] = set()
     with path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -36,7 +35,7 @@ def load_triplets_from_jsonl(jsonl_path: str | Path) -> List[Triplet]:
                 continue
             data = json.loads(line)
             # Tolerate keys that may be differently cased
-            triplets.append(Triplet(
+            triplets.add(Triplet(
                 subject=data["subject"],
                 predicate=data["predicate"],
                 object=data["object"],
