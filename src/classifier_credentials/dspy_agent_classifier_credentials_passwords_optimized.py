@@ -226,9 +226,9 @@ def main():
         mlflow.log_metric("baseline_accuracy", baseline_score_int)
         mlflow.log_metric("optimized_accuracy", optimized_score_int)
     
-    print(f"\n🎉 Optimization complete! Optimized model + metadata saved to: {combined_save_path}")
-    print(f"Baseline accuracy: {baseline_score_int}%")
-    print(f"Optimized accuracy: {optimized_score_int}%")
+        print(f"\n🎉 Optimization complete! Optimized model + metadata saved to: {combined_save_path}")
+        print(f"Baseline accuracy: {baseline_score_int}%")
+        print(f"Optimized accuracy: {optimized_score_int}%")
 
 
 if __name__ == "__main__":
