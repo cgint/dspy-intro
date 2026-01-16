@@ -28,7 +28,7 @@ def classification_accuracy(example: dspy.Example, pred: dspy.Prediction, trace=
     return float(example.classification == pred.classification)
 
 
-class ClassificationAccuracyWithFeedbackMetric(GEPAFeedbackMetric):
+class ClassificationAccuracyWithFeedbackMetric(GEPAFeedbackMetric): # type: ignore
 	def __call__(
 		self,
 		gold: dspy.Example,
@@ -154,7 +154,7 @@ def optimize_classifier(optimizer_type: Literal["MIPROv2", "GEPA"], trainer_lm: 
     return optimized_classifier, combined_save_path, baseline_score_int, optimized_score_int
 
 
-def test_classifier_examples(classifier, examples_desc="", question_prefix="") -> Dict[str, str]:
+def test_classifier_examples(classifier, examples_desc="") -> Dict[str, str]:
     """Test the classifier with some example inputs"""
     print(f"\n🧪 Testing {examples_desc}:")
     
@@ -187,9 +187,9 @@ def main():
         
         # Optimize classifier with
         trainer_lm_model_name = MODEL_NAME_GEMINI_2_5_FLASH
-        trainer_lm_reasoning_effort = "disable"
-        optimizer_type = "GEPA" # "MIPROv2" # "GEPA"
-        auto = "heavy"  # <-- We will use a "light" budget for this tutorial. However, we typically recommend using auto="heavy" for optimized performance!
+        trainer_lm_reasoning_effort: Literal["disable", "low", "medium", "high"] = "disable"
+        optimizer_type: Literal["MIPROv2", "GEPA"] = "GEPA"
+        auto: Literal["light", "medium", "heavy"] = "heavy"  # <-- We will use a "light" budget for this tutorial. However, we typically recommend using auto="heavy" for optimized performance!
         limit_trainset = 50
         limit_testset = 30
         randomize_sets = True
