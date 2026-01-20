@@ -156,6 +156,9 @@ uv run simplestdspy
 # Minimal DSPy example processing a PDF
 uv run simplestdspyattach
 
+# Minimal DSPy RLM example (sandboxed Python REPL)
+uv run simplestdspyrlm
+
 # Minimal FunctAI example
 uv run simplestfunctai
 
@@ -182,6 +185,8 @@ uv run extractgrammatical
     ├── simplest
     │   ├── simplest_dspy.py                   # minimal DSPy example
     │   ├── simplest_dspy_with_attachments.py  # minimal DSPy example processing a PDF
+    │   ├── simplest_dspy_rlm.py               # DSPy RLM example (sandboxed Python REPL)
+    │   ├── sample_logs/                       # sample logs used by simplest_dspy_rlm.py
     │   └── simplest_functai.py                # minimal FunctAI example
     ├── text_component_extract
     │   ├── extract_prompt_parts_101_guide.py      # prompt component extraction
