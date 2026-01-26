@@ -1,5 +1,7 @@
 import dspy
 import logging
+import io
+import sys
 from typing import Any, Dict, List
 from dspy.utils.callback import BaseCallback
 from common.utils import get_lm_for_model_name, dspy_configure
@@ -227,6 +229,21 @@ def multiply_numbers(a: float, b: float) -> float:
     return a * b
 
 
+def capture_dspy_inspect_history(n: int = 50) -> str:
+    """Capture the output of dspy.inspect_history() and return it as a string."""
+    buf = io.StringIO()
+    original_stdout = sys.stdout
+    sys.stdout = buf
+    try:
+        dspy.inspect_history(n=n)
+    finally:
+        sys.stdout = original_stdout
+
+    history_text = buf.getvalue()
+    buf.close()
+    return history_text
+
+
 def main():
     """Main function demonstrating DSPy ReAct agent with native tool logging."""
     # Configure DSPy (already sets track_usage=True)
@@ -275,6 +292,12 @@ def main():
         
         # Display tool usage summary
         tool_tracker.print_summary()
+
+        # Capture DSPy history without printing directly to stdout
+        history_text = capture_dspy_inspect_history(n=50)
+        with open("dspy_history.txt", "w", encoding="utf-8") as handle:
+            handle.write(history_text)
+        print("Saved DSPy history to dspy_history.txt")
         
         # Also show LM usage if available
         if prediction:
