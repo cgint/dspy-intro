@@ -1,0 +1,38 @@
+direction: down
+
+verification: "Implicit cached_tokens verification" {
+  start: "Pick provider" {
+    vertex: "vertex_ai/gemini-2.5-flash"
+    gemini: "gemini/gemini-2.5-flash"
+  }
+
+  prefix: "Build large shared prefix" {
+    note: "Must exceed implicit caching minimum (Flash: 1024+ tokens, Pro: 4096+)"
+  }
+
+  call1: "Call #1" {
+    out: "prediction.get_lm_usage()"
+    cached: "cached_tokens usually None"
+  }
+
+  call2: "Call #2..N (same prefix)" {
+    out: "prediction.get_lm_usage()"
+  }
+
+  check: "Check usage" {
+    field: "prompt_tokens_details.cached_tokens"
+  }
+
+  hit: "Cache hit" {
+    ok: "cached_tokens > 0"
+  }
+
+  miss: "Cache miss" {
+    note: "Implicit caching is opportunistic\nrepeat quickly to increase chance"
+  }
+
+  start -> prefix -> call1 -> call2 -> check
+  check -> hit: "cached_tokens > 0"
+  check -> miss: "cached_tokens is None/0"
+  miss -> call2
+}
