@@ -95,7 +95,7 @@ def extract_qa_pairs(text: str) -> list[QAPair]:
 class DSPyGeminiConfig:
     """Configuration utilities for DSPy with Gemini/Vertex AI."""
 
-    MODEL_GEMINI_2_5_FLASH = "gemini-2.5-flash"
+    MODEL_GEMINI_3_5_FLASH = "gemini-3.5-flash"
 
     _PROVIDER_GEMINI = "gemini"
     _PROVIDER_VERTEX_AI = "vertex_ai"
@@ -186,7 +186,7 @@ class DSPyGeminiConfig:
 
 
 def main() -> None:
-    DSPyGeminiConfig.configure(DSPyGeminiConfig.MODEL_GEMINI_2_5_FLASH)
+    DSPyGeminiConfig.configure(DSPyGeminiConfig.MODEL_GEMINI_3_5_FLASH)
 
     print("\n" + "=" * 80)
     print("Q&A Dataset Extraction Example")
