@@ -11,7 +11,56 @@ class TextChunk(pydantic.BaseModel):
     chunk_index: int = pydantic.Field(description="Order of chunk in document (0-based)")
 
 
+def _header_context_str(header_stack: List[str]) -> Optional[str]:
+    """Build header context string from stack parents, e.g. 'Section > Subsection'.
+    Uses header_stack[:-1] to exclude the current (deepest) header.
+    Returns None when there are fewer than 2 headers (no parent context).
+    """
+    if len(header_stack) < 2:
+        return None
+    parts = [h.replace('#', '').strip() for h in header_stack[:-1]]
+    return ' > '.join(parts)
+
+
+def _collect_continuation(lines: List[str], start: int, stop_patterns: List[re.Pattern]) -> tuple[str, int]:
+    """Scan from lines[start] onward, merging continuation lines into one text block.
+    
+    Stops at: empty line, any stop_pattern match, or end of lines.
+    If a line starts with whitespace it's treated as continuation (stripped).
+    Otherwise it's appended unmodified (heuristic for non-indented continuation).
+    Returns (combined_text, new_index_after_consuming_lines).
+    """
+    content_parts: List[str] = []
+    i = start
+    while i < len(lines):
+        next_line = lines[i].rstrip()
+        if not next_line.strip():
+            break
+        if any(p.match(next_line) for p in stop_patterns):
+            break
+        if next_line.startswith(' ') or next_line.startswith('\t'):
+            content_parts.append(next_line.strip())
+        else:
+            content_parts.append(next_line)
+        i += 1
+    return ' '.join(content_parts), i
+
+
+def _emit_chunk(chunks: List[TextChunk], content: str, chunk_type: str, header_context: Optional[str], current_index: int) -> int:
+    """Append a chunk if content >= 50 chars; return (possibly incremented) index."""
+    if len(content.strip()) >= 50:
+        chunks.append(TextChunk(
+            content=content,
+            chunk_type=chunk_type,
+            header_context=header_context,
+            chunk_index=current_index
+        ))
+        return current_index + 1
+    return current_index
+
+
 def split_markdown_into_chunks(text: str, strategy: str = "headers_first") -> List[TextChunk]:
+    # lizard forgives(cyclomatic_complexity)  # essential: 3 content types + header nesting
     """
     Split markdown text into logical chunks for better triplet extraction.
     
@@ -61,138 +110,66 @@ def split_markdown_into_chunks(text: str, strategy: str = "headers_first") -> Li
             # Collect content until next header or end
             section_content: List[str] = []
             i += 1
-            
             while i < len(lines):
                 next_line = lines[i].rstrip()
-                
-                # Stop at next header
                 if header_pattern.match(next_line):
                     break
-                
-                # Collect non-empty lines
                 if next_line.strip():
                     section_content.append(next_line)
-                
                 i += 1
             
             # Create chunk for header section if it has content
             if section_content:
                 content = '\n'.join(section_content)
-                header_context = ' > '.join([h.replace('#', '').strip() for h in header_stack[:-1]]) if len(header_stack) > 1 else None
+                hctx = _header_context_str(header_stack)
                 
                 # Further split by lists if present
-                sub_chunks = _split_section_by_lists(content, header_context, current_chunk_index)
+                sub_chunks = _split_section_by_lists(content, hctx, current_chunk_index)
                 if sub_chunks:
                     chunks.extend(sub_chunks)
                     current_chunk_index += len(sub_chunks)
                 else:
-                    # No lists found, treat as paragraph
-                    if len(content.strip()) >= 50:  # Skip very small chunks
-                        chunks.append(TextChunk(
-                            content=content,
-                            chunk_type="header_section",
-                            header_context=header_context,
-                            chunk_index=current_chunk_index
-                        ))
-                        current_chunk_index += 1
+                    current_chunk_index = _emit_chunk(chunks, content, "header_section", hctx, current_chunk_index)
             continue
         
         # Check for numbered list items (outside of header sections)
         numbered_match = numbered_item_pattern.match(line)
         if numbered_match:
             item_content = numbered_match.group(1).strip()
-            
-            # Collect continuation lines (indented or part of same item)
-            i += 1
-            while i < len(lines):
-                next_line = lines[i].rstrip()
-                if not next_line.strip():
-                    break
-                # If next line is another list item or header, stop
-                if numbered_item_pattern.match(next_line) or bulleted_item_pattern.match(next_line) or header_pattern.match(next_line):
-                    break
-                # If indented, it's continuation
-                if next_line.startswith(' ') or next_line.startswith('\t'):
-                    item_content += ' ' + next_line.strip()
-                else:
-                    # Might be continuation or new paragraph
-                    item_content += ' ' + next_line
-                i += 1
-            
-            header_context = ' > '.join([h.replace('#', '').strip() for h in header_stack]) if header_stack else None
-            
-            if len(item_content.strip()) >= 50:  # Skip very small chunks
-                chunks.append(TextChunk(
-                    content=item_content,
-                    chunk_type="numbered_item",
-                    header_context=header_context,
-                    chunk_index=current_chunk_index
-                ))
-                current_chunk_index += 1
+            continuation, i = _collect_continuation(lines, i + 1, [numbered_item_pattern, bulleted_item_pattern, header_pattern])
+            if continuation:
+                item_content += ' ' + continuation
+            hctx = _header_context_str(header_stack)
+            current_chunk_index = _emit_chunk(chunks, item_content, "numbered_item", hctx, current_chunk_index)
             continue
         
         # Check for bulleted list items
         bulleted_match = bulleted_item_pattern.match(line)
         if bulleted_match:
             item_content = bulleted_match.group(1).strip()
-            
-            # Collect continuation lines
-            i += 1
-            while i < len(lines):
-                next_line = lines[i].rstrip()
-                if not next_line.strip():
-                    break
-                if numbered_item_pattern.match(next_line) or bulleted_item_pattern.match(next_line) or header_pattern.match(next_line):
-                    break
-                if next_line.startswith(' ') or next_line.startswith('\t'):
-                    item_content += ' ' + next_line.strip()
-                else:
-                    item_content += ' ' + next_line
-                i += 1
-            
-            header_context = ' > '.join([h.replace('#', '').strip() for h in header_stack]) if header_stack else None
-            
-            if len(item_content.strip()) >= 50:  # Skip very small chunks
-                chunks.append(TextChunk(
-                    content=item_content,
-                    chunk_type="bulleted_item",
-                    header_context=header_context,
-                    chunk_index=current_chunk_index
-                ))
-                current_chunk_index += 1
+            continuation, i = _collect_continuation(lines, i + 1, [numbered_item_pattern, bulleted_item_pattern, header_pattern])
+            if continuation:
+                item_content += ' ' + continuation
+            hctx = _header_context_str(header_stack)
+            current_chunk_index = _emit_chunk(chunks, item_content, "bulleted_item", hctx, current_chunk_index)
             continue
         
         # Regular paragraph - collect until empty line or next special element
         paragraph_lines: List[str] = [line]
-        i += 1
+        continuation, i = _collect_continuation(lines, i + 1, [header_pattern, numbered_item_pattern, bulleted_item_pattern])
+        if continuation:
+            paragraph_lines.append(continuation)
         
-        while i < len(lines):
-            next_line = lines[i].rstrip()
-            if not next_line.strip():
-                break
-            # Stop at headers or list items
-            if header_pattern.match(next_line) or numbered_item_pattern.match(next_line) or bulleted_item_pattern.match(next_line):
-                break
-            paragraph_lines.append(next_line)
-            i += 1
+        paragraph_content = ' '.join(paragraph_lines).strip()
+        hctx = _header_context_str(header_stack)
         
-        paragraph_content = '\n'.join(paragraph_lines).strip()
-        header_context = ' > '.join([h.replace('#', '').strip() for h in header_stack]) if header_stack else None
-        
-        if len(paragraph_content) >= 50:  # Skip very small chunks
-            # Split very large paragraphs by sentences
+        if len(paragraph_content.strip()) >= 50:
             if len(paragraph_content) > 2000:
-                sentence_chunks = _split_large_text_by_sentences(paragraph_content, header_context, current_chunk_index)
+                sentence_chunks = _split_large_text_by_sentences(paragraph_content, hctx, current_chunk_index)
                 chunks.extend(sentence_chunks)
                 current_chunk_index += len(sentence_chunks)
             else:
-                chunks.append(TextChunk(
-                    content=paragraph_content,
-                    chunk_type="paragraph",
-                    header_context=header_context,
-                    chunk_index=current_chunk_index
-                ))
-                current_chunk_index += 1
+                current_chunk_index = _emit_chunk(chunks, paragraph_content, "paragraph", hctx, current_chunk_index)
     
     return chunks
 
@@ -219,53 +196,16 @@ def _split_section_by_lists(content: str, header_context: Optional[str], start_i
         
         if numbered_match:
             item_content = numbered_match.group(1).strip()
-            i += 1
-            
-            # Collect continuation
-            while i < len(lines):
-                next_line = lines[i].rstrip()
-                if not next_line.strip():
-                    break
-                if numbered_pattern.match(next_line) or bulleted_pattern.match(next_line):
-                    break
-                if next_line.startswith(' ') or next_line.startswith('\t'):
-                    item_content += ' ' + next_line.strip()
-                else:
-                    item_content += ' ' + next_line
-                i += 1
-            
-            if len(item_content.strip()) >= 50:
-                chunks.append(TextChunk(
-                    content=item_content,
-                    chunk_type="numbered_item",
-                    header_context=header_context,
-                    chunk_index=chunk_index
-                ))
-                chunk_index += 1
+            continuation, i = _collect_continuation(lines, i + 1, [numbered_pattern, bulleted_pattern])
+            if continuation:
+                item_content += ' ' + continuation
+            chunk_index = _emit_chunk(chunks, item_content, "numbered_item", header_context, chunk_index)
         elif bulleted_match:
             item_content = bulleted_match.group(1).strip()
-            i += 1
-            
-            while i < len(lines):
-                next_line = lines[i].rstrip()
-                if not next_line.strip():
-                    break
-                if numbered_pattern.match(next_line) or bulleted_pattern.match(next_line):
-                    break
-                if next_line.startswith(' ') or next_line.startswith('\t'):
-                    item_content += ' ' + next_line.strip()
-                else:
-                    item_content += ' ' + next_line
-                i += 1
-            
-            if len(item_content.strip()) >= 50:
-                chunks.append(TextChunk(
-                    content=item_content,
-                    chunk_type="bulleted_item",
-                    header_context=header_context,
-                    chunk_index=chunk_index
-                ))
-                chunk_index += 1
+            continuation, i = _collect_continuation(lines, i + 1, [numbered_pattern, bulleted_pattern])
+            if continuation:
+                item_content += ' ' + continuation
+            chunk_index = _emit_chunk(chunks, item_content, "bulleted_item", header_context, chunk_index)
         else:
             i += 1
     

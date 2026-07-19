@@ -11,52 +11,74 @@ GOOGLE_PROVIDER_VERTEX_AI = "vertex_ai"
 GOOGLE_PROVIDER_LIST = [GOOGLE_PROVIDER_GEMINI, GOOGLE_PROVIDER_VERTEX_AI]
 VERTEX_AI_FALLBACK_MODEL = "gemini-2.5-flash-lite"
 
-def get_model_access_prefix_or_fail(model_name: str) -> str:
+def _provider_from_model_name(model_name: str) -> str | None:
+    """Extract provider prefix from model name if present, e.g. 'vertex_ai/gemini-2.5' -> 'vertex_ai'.
+    Returns None if no prefix or prefix not in GOOGLE_PROVIDER_LIST.
     """
-    Whenever the model name already contains the access prefix then look up if the env variables are set and return the access prefix.
-    In case the model name does not contain the access prefix then decide from the env variables what access prefix to return.
-    When no prefix is specified, vertex_ai/ is prioritized if available.
+    prefix: str | None = model_name.split("/")[0] if "/" in model_name else None
+    if prefix is not None and prefix in GOOGLE_PROVIDER_LIST:
+        return prefix
+    return None
 
-    Returns e.g. "" or "gemini/" or "vertex_ai/"
-    """
-    provider_from_model_name: str | None = model_name.split("/")[0] if "/" in model_name else None
-    if provider_from_model_name is not None and provider_from_model_name in GOOGLE_PROVIDER_LIST:
-        return "" # In this case the model name already contains the provider and it is one we use as is
 
-    # Collect state: what credentials are available
-    has_vertex_ai_env_vars = os.getenv("VERTEXAI_PROJECT") and os.getenv("VERTEXAI_LOCATION")
-    has_gemini_env_vars = os.getenv("GEMINI_API_KEY")
+def _resolve_provider(prefix: str | None, has_vertex_ai: bool, has_gemini: bool) -> str:
+    """Resolve which provider to use based on explicit prefix and available credentials."""
+    if prefix == GOOGLE_PROVIDER_VERTEX_AI:
+        if not has_vertex_ai:
+            raise ValueError(
+                f"Both VERTEXAI_PROJECT and VERTEXAI_LOCATION must be set as "
+                f"environment variables for {GOOGLE_PROVIDER_VERTEX_AI} prefix"
+            )
+        return GOOGLE_PROVIDER_VERTEX_AI
+    if prefix == GOOGLE_PROVIDER_GEMINI:
+        return _require_gemini_env(has_gemini)
     
-    selected_provider: str | None = None
-    # Evaluate based on model name and available credentials
-    if provider_from_model_name is not None and provider_from_model_name == GOOGLE_PROVIDER_VERTEX_AI:
-        if not has_vertex_ai_env_vars:
-            raise ValueError(f"Both VERTEXAI_PROJECT and VERTEXAI_LOCATION must be set as environment variables for {GOOGLE_PROVIDER_VERTEX_AI} prefix")
-        selected_provider = provider_from_model_name
-    elif provider_from_model_name is not None and provider_from_model_name == GOOGLE_PROVIDER_GEMINI:
-        if not has_gemini_env_vars:
-            raise ValueError(f"GEMINI_API_KEY must be set as environment variable for {GOOGLE_PROVIDER_GEMINI} prefix")
-        selected_provider = provider_from_model_name
-    
-    # No explicit prefix - decide based on available credentials
-    if not selected_provider:
-        if has_vertex_ai_env_vars:
-            selected_provider = GOOGLE_PROVIDER_VERTEX_AI
-        elif has_gemini_env_vars:
-            selected_provider = GOOGLE_PROVIDER_GEMINI
-        else:
-            raise ValueError("Either (VERTEXAI_PROJECT and VERTEXAI_LOCATION) or (GEMINI_API_KEY) must be set as environment variables.")
-    
-    # Unset the other env vars to have clarity
+    # No explicit prefix — auto-detect
+    if has_vertex_ai:
+        return GOOGLE_PROVIDER_VERTEX_AI
+    if has_gemini:
+        return GOOGLE_PROVIDER_GEMINI
+    raise ValueError(
+        "Either (VERTEXAI_PROJECT and VERTEXAI_LOCATION) or (GEMINI_API_KEY) "
+        "must be set as environment variables."
+    )
+
+
+def _require_gemini_env(has_gemini_env: bool) -> str:
+    if not has_gemini_env:
+        raise ValueError("GEMINI_API_KEY must be set as environment variable for gemini prefix")
+    return GOOGLE_PROVIDER_GEMINI
+
+
+def _cleanup_other_env_vars(selected_provider: str) -> None:
     if selected_provider == GOOGLE_PROVIDER_VERTEX_AI:
         os.unsetenv("GEMINI_API_KEY")
     elif selected_provider == GOOGLE_PROVIDER_GEMINI:
         os.unsetenv("VERTEXAI_PROJECT")
         os.unsetenv("VERTEXAI_LOCATION")
 
-    # finished preparing
-    print(f"Using model access prefix: {selected_provider}")
-    return f"{selected_provider}/"
+
+def get_model_access_prefix_or_fail(model_name: str) -> str:
+    """
+    Determine which model access prefix to use ("", "gemini/", or "vertex_ai/").
+
+    If the model name already contains a valid provider prefix (e.g. "gemini/..."),
+    the prefix is returned as-is after validating env vars.
+    Otherwise the function auto-selects vertex_ai (preferred) or gemini
+    based on available environment variables.
+    """
+    prefix = _provider_from_model_name(model_name)
+    if prefix is not None:
+        return ""  # model name already has the prefix; caller uses it as-is
+
+    has_vertex_ai = bool(os.getenv("VERTEXAI_PROJECT") and os.getenv("VERTEXAI_LOCATION"))
+    has_gemini = bool(os.getenv("GEMINI_API_KEY"))
+
+    selected = _resolve_provider(prefix, has_vertex_ai, has_gemini)
+    _cleanup_other_env_vars(selected)
+
+    print(f"Using model access prefix: {selected}")
+    return f"{selected}/"
 
 def dspy_configure(lm: dspy.LM, track_usage: bool = True, adapter: dspy.Adapter = dspy.JSONAdapter()):
     """

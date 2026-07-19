@@ -1,0 +1,9 @@
+# .gitleaks.toml
+# Training data for DSPy classifiers contains deliberately crafted credential-like
+# strings used as classification examples. These are not real secrets.
+
+[[allowlists]]
+  paths = [
+    "src/classifier_credentials/dspy_agent_classifier_credentials_passwords_examples.py",
+    "src/classifier_credentials/dspy_agent_classifier_credentials_passwords_optimized.py",
+  ]

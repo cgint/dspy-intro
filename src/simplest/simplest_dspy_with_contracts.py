@@ -111,46 +111,47 @@ def answer_question(contracts_data: list[ContractInfo], question: str) -> str:
     return result.answer
 
 
-def main():
-    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable", max_tokens=16384))
-    
-    # Get directory from command line or use default
+def _resolve_contracts_dir() -> Path:
+    """Get contracts directory from CLI arg or default."""
     if len(sys.argv) > 1:
-        contracts_dir = Path(sys.argv[1])
-    else:
-        contracts_dir = Path("src/simplest/docs/contracts")
-    
-    # Validate directory exists
-    if not contracts_dir.exists():
-        print(f"\n✗ Error: Directory does not exist: {contracts_dir}")
+        return Path(sys.argv[1])
+    return Path("src/simplest/docs/contracts")
+
+
+def _validate_dir(d: Path) -> list[Path] | None:
+    """Validate a directory exists and contains PDFs. Returns sorted PDF list or None on failure."""
+    if not d.exists():
+        print(f"\n✗ Error: Directory does not exist: {d}")
         print(f"\nUsage: python {sys.argv[0]} [directory_path]")
-        return
-    
-    if not contracts_dir.is_dir():
-        print(f"\n✗ Error: Path is not a directory: {contracts_dir}")
+        return None
+    if not d.is_dir():
+        print(f"\n✗ Error: Path is not a directory: {d}")
         print(f"\nUsage: python {sys.argv[0]} [directory_path]")
-        return
-    
-    # Find all PDF files in the directory
-    pdf_files = [
-        f for f in contracts_dir.iterdir() 
+        return None
+
+    pdf_files = sorted(
+        f for f in d.iterdir()
         if f.is_file() and f.suffix.lower() == ".pdf"
-    ]
-    
+    )
     if not pdf_files:
-        print(f"\n⚠️  No PDF files found in {contracts_dir}")
-        return
-    
+        print(f"\n⚠️  No PDF files found in {d}")
+        return None
+    return pdf_files
+
+
+def _print_pipeline_header(d: Path, count: int) -> None:
     print(f"\n{'=' * 80}")
     print("Contract Processing Pipeline")
     print(f"{'=' * 80}")
-    print(f"Directory:        {contracts_dir.absolute()}")
-    print(f"PDFs found:       {len(pdf_files)}")
+    print(f"Directory:        {d.absolute()}")
+    print(f"PDFs found:       {count}")
     print(f"{'=' * 80}\n")
-    
-    # Process each PDF
-    contracts_data = []
-    for pdf_path in sorted(pdf_files):
+
+
+def _process_pdfs(pdf_files: list[Path]) -> list[ContractInfo]:
+    """Process each PDF and return extracted ContractInfo objects."""
+    contracts_data: list[ContractInfo] = []
+    for pdf_path in pdf_files:
         pdf_id = pdf_path.stem
         try:
             contract_info = process_pdf(pdf_id, pdf_path)
@@ -159,38 +160,58 @@ def main():
         except Exception as e:
             print(f"  ✗ Error processing {pdf_id}: {e}\n")
             continue
-    
+    return contracts_data
+
+
+def _print_pipeline_result(d: Path) -> None:
     print(f"\n{'=' * 80}")
-    print(f"✓ Processing complete! Extracted data saved to: {contracts_dir.absolute()}")
+    print(f"✓ Processing complete! Extracted data saved to: {d.absolute()}")
     print(f"{'=' * 80}\n")
-    
-    # Interactive Q&A loop
-    if contracts_data:
-        print("\n" + "=" * 80)
-        print("Question & Answer Mode")
-        print("=" * 80)
-        print("Ask questions about the contracts (or 'quit' to exit)")
-        print("=" * 80 + "\n")
-        
-        while True:
-            try:
-                question = input("\nYour question: ").strip()
-                if question.lower() in ['quit', 'exit', 'q']:
-                    break
-                if not question:
-                    continue
-                
-                print("\n  → Processing question...")
-                answer = answer_question(contracts_data, question)
-                print(f"\nAnswer:\n{answer}\n")
-                print("-" * 80)
-                
-            except KeyboardInterrupt:
-                print("\n\nExiting Q&A mode...")
+
+
+def _run_qa_loop(contracts_data: list[ContractInfo]) -> None:
+    """Interactive Q&A loop over extracted contract data."""
+    print("\n" + "=" * 80)
+    print("Question & Answer Mode")
+    print("=" * 80)
+    print("Ask questions about the contracts (or 'quit' to exit)")
+    print("=" * 80 + "\n")
+
+    while True:
+        try:
+            question = input("\nYour question: ").strip()
+            if question.lower() in ['quit', 'exit', 'q']:
                 break
-            except Exception as e:
-                print(f"\n✗ Error: {e}\n")
+            if not question:
                 continue
+
+            print("\n  → Processing question...")
+            answer = answer_question(contracts_data, question)
+            print(f"\nAnswer:\n{answer}\n")
+            print("-" * 80)
+
+        except KeyboardInterrupt:
+            print("\n\nExiting Q&A mode...")
+            break
+        except Exception as e:
+            print(f"\n✗ Error: {e}\n")
+            continue
+
+
+def main():
+    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable", max_tokens=16384))
+
+    contracts_dir = _resolve_contracts_dir()
+    pdf_files = _validate_dir(contracts_dir)
+    if pdf_files is None:
+        return
+
+    _print_pipeline_header(contracts_dir, len(pdf_files))
+    contracts_data = _process_pdfs(pdf_files)
+    _print_pipeline_result(contracts_dir)
+
+    if contracts_data:
+        _run_qa_loop(contracts_data)
 
 
 if __name__ == "__main__":

@@ -39,6 +39,7 @@ class JsonStringStreamDecoder:
         return self._ended
 
     def feed(self, raw: str) -> str:
+        # lizard forgives(cyclomatic_complexity)  # essential: 4-state string decoder
         if self._ended or not raw:
             return ""
 
