@@ -9,6 +9,7 @@ from common.constants import (
 GOOGLE_PROVIDER_GEMINI = "gemini"
 GOOGLE_PROVIDER_VERTEX_AI = "vertex_ai"
 GOOGLE_PROVIDER_LIST = [GOOGLE_PROVIDER_GEMINI, GOOGLE_PROVIDER_VERTEX_AI]
+VERTEX_AI_FALLBACK_MODEL = "gemini-2.5-flash-lite"
 
 def get_model_access_prefix_or_fail(model_name: str) -> str:
     """
@@ -65,10 +66,16 @@ def dspy_configure(lm: dspy.LM, track_usage: bool = True, adapter: dspy.Adapter 
     dspy.settings.configure(lm=lm, track_usage=track_usage, adapter=adapter)
     dspy.configure_cache(enable_disk_cache=False, enable_memory_cache=False)
 
+def _model_for_provider(model_name: str, model_access_prefix: str) -> str:
+    if model_access_prefix == f"{GOOGLE_PROVIDER_VERTEX_AI}/" and model_name.startswith("gemini-3"):
+        return VERTEX_AI_FALLBACK_MODEL
+    return model_name
+
 def get_lm_for_model_name(model_name: str, reasoning_effort: Literal["low", "medium", "high", "disable"] | None = "disable", max_tokens: int = 8192, temperature: float = 0.3) -> dspy.LM:
     model_access_prefix: str = get_model_access_prefix_or_fail(model_name)
+    effective_model_name = _model_for_provider(model_name, model_access_prefix)
     return dspy.LM(
-        model=f'{model_access_prefix}{model_name}',
+        model=f'{model_access_prefix}{effective_model_name}',
         max_tokens=max_tokens, temperature=temperature,
         reasoning_effort=reasoning_effort if reasoning_effort is not None else None,
         # thinking={"type": "enabled", "budget_tokens": 512}

@@ -12,7 +12,8 @@ def joke_funnyness_factor_0_to_10(joke: str) -> int:
 
 def main():
     model_access_prefix = get_model_access_prefix_or_fail(MODEL_NAME_GEMINI_2_5_FLASH)
-    model_name = f"{model_access_prefix}{MODEL_NAME_GEMINI_2_5_FLASH}"
+    model_id = "gemini-2.5-flash-lite" if model_access_prefix == "vertex_ai/" else MODEL_NAME_GEMINI_2_5_FLASH
+    model_name = f"{model_access_prefix}{model_id}"
     configure(lm=model_name)
 
     the_joke: str = joke_for_john()

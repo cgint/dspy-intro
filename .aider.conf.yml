@@ -24,7 +24,7 @@
 #anthropic-api-key: xxx
 
 ## Specify the model to use for the main chat
-model: vertex_ai/gemini-3.5-flash
+model: vertex_ai/gemini-2.5-flash-lite
 
 ## Use claude-3-opus-20240229 model for the main chat
 #opus: false

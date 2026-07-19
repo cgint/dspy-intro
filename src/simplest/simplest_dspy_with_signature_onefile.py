@@ -96,6 +96,7 @@ class DSPyGeminiConfig:
     """Configuration utilities for DSPy with Gemini/Vertex AI."""
 
     MODEL_GEMINI_3_5_FLASH = "gemini-3.5-flash"
+    MODEL_VERTEX_FLASH_LITE = "gemini-2.5-flash-lite"
 
     _PROVIDER_GEMINI = "gemini"
     _PROVIDER_VERTEX_AI = "vertex_ai"
@@ -125,12 +126,20 @@ class DSPyGeminiConfig:
     ) -> dspy.LM:
         """Create a DSPy LM instance for the given model."""
         prefix = cls._get_model_access_prefix_or_fail(model_name)
+        effective_model_name = cls._model_for_provider(model_name, prefix)
         return dspy.LM(
-            model=f"{prefix}{model_name}",
+            model=f"{prefix}{effective_model_name}",
             max_tokens=max_tokens,
             temperature=temperature,
             reasoning_effort=reasoning_effort,
         )
+
+    @classmethod
+    def _model_for_provider(cls, model_name: str, prefix: str) -> str:
+        """Use a Vertex-available Flash model when auto-selected Vertex would 404 on Gemini 3.x."""
+        if prefix == f"{cls._PROVIDER_VERTEX_AI}/" and model_name.startswith("gemini-3"):
+            return cls.MODEL_VERTEX_FLASH_LITE
+        return model_name
 
     @classmethod
     def _get_model_access_prefix_or_fail(cls, model_name: str) -> str:
