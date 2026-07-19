@@ -6,15 +6,8 @@ dependencies = [
     "dspy",
     "google-cloud-aiplatform",
 
-    # NOTE: TEMPORARY PIN SET (needs untangling later).
-    # Reason: newer transitive combinations of openai/litellm/google-genai/pydantic triggered
-    # `PydanticSerializationUnexpectedValue` serializer warnings (Message / StreamingChoices)
-    # when running `uv run simplesttoollogging`. These pins match the known-good environment.
-    "google-genai==1.52.0",
-    "litellm==1.80.5",
-    "openai==2.8.1",
-    "pydantic==2.12.4",
-
+    # NOTE: Temporary pins removed on 2026-07-19 to resolve security vulns (was: google-genai==1.52.0, litellm==1.80.5, openai==2.8.1, pydantic==2.12.4)
+    # If pydantic serialization regression reoccurs, investigate with `uv run simplesttoollogging` before re-pinning.
     "mlflow",
     "attachments",
     "functai",

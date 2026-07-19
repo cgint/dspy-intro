@@ -39,6 +39,9 @@ htmlcov/
 .DS_Store
 .~lock*
 
+# Scan results
+.scan-results/
+
 # Test output files
 test-logs/
 test-results/
