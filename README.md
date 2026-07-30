@@ -1,18 +1,127 @@
-# DSPy Intro - Credentials Classifier Examples + Simplest Example
+# Getting Started with DSPy: A Beginner-Friendly Playground
 
-[https://github.com/stanfordnlp/dspy](https://github.com/stanfordnlp/dspy)
+Welcome! If you have no prior experience with DSPy or FunctAI, this repository is designed for you. It contains simple, runnable examples that show how to turn LLMs into structured, typed, and optimizable software components.
 
-This repository contains runnable DSPy examples:
+Unlike traditional prompt engineering (which relies on manually editing long strings of text), **DSPy** lets you define your inputs and outputs programmatically, and then automatically compiles/optimizes the prompts for you.
 
-- Credentials/passwords classifier
-- Optimizer that improves the classifier with GEPA/MIPROv2
-- A minimal DSPy demo
-- A minimal DSPy demo processing a PDF
+---
 
-## Output of: "A minimal DSPy demo"
+## 🚀 3-Minute Quick Start
 
-### Full code
+Follow these steps to run your very first example.
 
+### 1. Prerequisites
+Make sure you have Python 3.13 installed. We use **`uv`** for lightning-fast dependency and environment management.
+*   **Mac (via Homebrew):** `brew install uv`
+*   **Windows/Linux/Other:** See [uv installation guide](https://github.com/astral-sh/uv).
+
+### 2. Setup & Environment Keys
+Clone this repository, navigate to its folder, and sync the environment:
+```bash
+uv sync --all-groups --all-extras
+```
+
+Next, configure model access by choosing **one** of the following options:
+
+*   **Option A: Gemini API (Simplest)**
+    Get a key from [Google AI Studio](https://aistudio.google.com/) (free tier available):
+    ```bash
+    export GEMINI_API_KEY="your-api-key-here"
+    ```
+
+*   **Option B: Google Cloud Vertex AI**
+    If you are running in GCP or have active gcloud credentials:
+    ```bash
+    export VERTEXAI_PROJECT="your-gcp-project-id"
+    export VERTEXAI_LOCATION="us-central1" # or your preferred region
+    ```
+
+### 3. Run Your First Example
+Now, run the simplest demo in the repository:
+```bash
+uv run simplestdspy
+```
+
+This will call Google Gemini, generate a joke for "John", and then evaluate how funny that joke is on a scale of 0 to 10.
+
+---
+
+## 💡 Core Concepts: What is DSPy?
+
+In classic LLM development, you write a string prompt like `"Please write a joke about {name}."`
+In DSPy, we define a **Signature** instead.
+
+Look at this snippet from `src/simplest/simplest_dspy.py`:
+
+```python
+# "name -> joke" tells DSPy:
+# - Input parameter: name
+# - Expected output parameter: joke
+joker = dspy.Predict("name -> joke")
+the_joke_prediction = joker(name="John")
+```
+
+And to force structured outputs with types, we can do:
+```python
+# The ": int" suffix forces the LLM to output a clean integer
+funnyness_evaluator = dspy.Predict("joke -> funnyness_0_to_10: int")
+```
+DSPy automatically constructs the underlying system prompts, parses the outputs, and formats them into python types for you behind the scenes.
+
+---
+
+## 📂 Runnable Examples in this Repo
+
+We have several console scripts defined in `pyproject.toml`. You can run any of them using `uv run <script-name>`:
+
+| Script Command | File Path | What it does |
+| :--- | :--- | :--- |
+| **`uv run simplestdspy`** | `src/simplest/simplest_dspy.py` | Generates a joke and rates its funnyness using simple DSPy signatures. |
+| **`uv run simplestdspyattach`** | `src/simplest/simplest_dspy_with_attachments.py` | Extracts structured key takeaways and summaries directly from a PDF file. |
+| **`uv run simplestdspyrlm`** | `src/simplest/simplest_dspy_rlm.py` | Runs a sandboxed agent with sandboxed Python REPL tools. |
+| **`uv run password`** | `src/classifier_credentials/...` | Classifies whether text inputs contain exposed credentials (e.g., outputs "safe" or "unsafe"). |
+| **`uv run optimizer`** | `src/classifier_credentials/...` | Uses DSPy Optimizers (GEPA / MIPROv2) to automatically refine the classification prompts using training data. |
+| **`uv run simplestfunctai`** | `src/simplest/simplest_functai.py` | Demonstrates **FunctAI**, which wraps python functions into type-safe LLM calls. |
+| **`uv run extractprompt`** | `src/text_component_extract/...` | Extracts Persona, Task, Context, and Format from any arbitrary text block. |
+| **`uv run extractgrammatical`** | `src/text_component_extract/...` | Extracts Subject, Verb, Object, and Modifier grammatical components from sentences. |
+
+---
+
+## 📊 Visualizing Results with MLflow
+
+DSPy can track its inputs, outputs, and intermediate states. To inspect what was sent to the LLM and how it responded:
+
+1. Start the MLflow server:
+   ```bash
+   uv run mlflow server --host 127.0.0.1 --port 8182
+   ```
+2. Open your browser and navigate to: **[http://127.0.0.1:8182](http://127.0.0.1:8182)**
+
+---
+
+## 🏗️ Repository Layout
+
+```
+├── pyproject.toml                         # Project configuration, scripts, and dependencies
+├── src
+│   ├── simplest                           # Minimal, high-clarity entry points (start here!)
+│   │   ├── simplest_dspy.py               # Basic jokes example
+│   │   ├── simplest_dspy_with_attachments.py # PDF processing example
+│   │   └── simplest_functai.py            # FunctAI implementation
+│   ├── classifier_credentials              # More advanced password classifier & training loop
+│   ├── text_component_extract             # Text parser/extractor examples
+│   └── common                             # Shared helpers (LLM connections, configurations)
+```
+
+---
+
+# 🔍 Reference: Output Examples & Deep Dive Code
+
+Below are the details and expected outputs of the main examples, preserved for detailed reference.
+
+## 1. "A minimal DSPy demo" (`simplestdspy`)
+
+### Full code:
 ```python
 import dspy
 from common.utils import get_lm_for_model_name, dspy_configure
@@ -39,18 +148,19 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 ```
 
-### Output
-
+### Expected Output:
 ```
 Why did John bring a ladder to the bar? Because he heard the drinks were on the house!
  -> How funny is the joke on a scale of 0 to 10? 6
 ```
 
-## Output of: "Credentials/passwords classifier"
+---
 
+## 2. "Credentials/passwords classifier" (`password`)
+
+### Expected Output:
 ```
 Input text: My username is john and password is secret123
   -> Classification: unsafe
@@ -60,8 +170,13 @@ Input text: My login is admin and my password is --REDACTED--
   -> Classification: safe
 ```
 
-## Output of: "A minimal DSPy demo processing a PDF"
+---
 
+## 3. "A minimal DSPy demo processing a PDF" (`simplestdspyattach`)
+
+This script extracts key metrics and takeaways from `src/simplest/docs/simplest_dspy_with_attachments_2507.11299.pdf`.
+
+### Expected Output:
 ```
 Context: src/simplest/docs/simplest_dspy_with_attachments_2507.11299.pdf
  -> Processing ...
@@ -105,108 +220,22 @@ Covered topics and their importance (from 0 low to 10 high):
  - (Importance: 6) Pretrained Models Used
 ```
 
-# FunctAI Intro - Simplest Example
+---
 
-FunctAI is based on DSPy and makes python functions become typed LLM-Calls
+## 4. FunctAI & Text Component Extraction (`simplestfunctai`, `extractprompt`, `extractgrammatical`)
 
-[https://github.com/MaximeRivest/functai](https://github.com/MaximeRivest/functai)
+FunctAI is based on DSPy and turns Python functions into typed LLM-Calls (learn more at [https://github.com/MaximeRivest/functai](https://github.com/MaximeRivest/functai)).
 
-## Text Component Extraction
+### Prompt Component Extraction (`extractprompt`)
+Extracts the four main components of a prompt from a given instruction:
+- **Persona:** Who the AI should act as.
+- **Task:** What specific action needs to be performed.
+- **Context:** Background information or details.
+- **Format:** How the output should be structured.
 
-### Prompt Component Extraction
-
-This example extracts the four main components of a prompt (Persona, Task, Context, Format) from a given text.
-
-### Grammatical Component Extraction
-
-This example extracts grammatical components (Subject, Verb, Object, Modifier) from a sentence.
-
-## Requirements
-
-- Python >=3.11
-- uv (dependency and environment management)
-  - Install using `brew install uv`
-
-## Setup
-
-```bash
-uv sync --all-groups --all-extras 
-```
-
-Configure model access (pick one):
-
-```bash
-# Option A: Vertex AI
-export VERTEXAI_PROJECT="<your_gcp_project>"
-export VERTEXAI_LOCATION="<region>"   # e.g., europe-west1
-
-# Option B: Gemini API (Google AI Studio)
-# Key can be taken from 1-password called 'Gemini API Key dev (Google AI Studio)'
-export GEMINI_API_KEY="<your_gemini_api_key>"
-```
-
-## Running
-
-Console scripts are defined in pyproject.toml:
-
-```bash
-# Minimal DSPy example
-uv run simplestdspy
-
-# Minimal DSPy example processing a PDF
-uv run simplestdspyattach
-
-# Minimal DSPy RLM example (sandboxed Python REPL)
-uv run simplestdspyrlm
-
-# Minimal FunctAI example
-uv run simplestfunctai
-
-
-# Basic credentials/passwords classifier
-uv run password
-
-# Credentials classifier optimization (GEPA / MIPROv2)
-uv run optimizer
-
-# Prompt component extraction
-uv run extractprompt
-
-# Grammatical component extraction
-uv run extractgrammatical
-```
-
-## Project Structure
-
-```
-├── pyproject.toml
-├── README.md
-└── src
-    ├── simplest
-    │   ├── simplest_dspy.py                   # minimal DSPy example
-    │   ├── simplest_dspy_with_attachments.py  # minimal DSPy example processing a PDF
-    │   ├── simplest_dspy_rlm.py               # DSPy RLM example (sandboxed Python REPL)
-    │   ├── sample_logs/                       # sample logs used by simplest_dspy_rlm.py
-    │   └── simplest_functai.py                # minimal FunctAI example
-    ├── text_component_extract
-    │   ├── extract_prompt_parts_101_guide.py      # prompt component extraction
-    │   └── extract_sentence_parts_grammatical.py  # grammatical component extraction
-    ├── common
-    │   ├── constants.py      # model names
-    │   ├── mlflow_utils.py   # MLflow helpers
-    │   └── utils.py          # LM factory and dspy_configure helpers
-    ├── classifier_credentials
-    │   ├── dspy_agent_classifier_credentials_passwords.py            # basic classifier
-    │   ├── dspy_agent_classifier_credentials_passwords_optimized.py  # optimizer (GEPA/MIPROv2)
-    │   └── dspy_agent_classifier_credentials_passwords_examples.py   # data prep & example sets
-```
-
-# How to evaluate the MLFlow data collected by dspy
-
-```bash
-uv run mlflow server --host 127.0.0.1 --port 8182
-```
-
-Head to http://127.0.0.1:8182
-
-
+### Grammatical Component Extraction (`extractgrammatical`)
+Extracts fundamental grammatical parts from sentences:
+- **Subject**
+- **Verb**
+- **Object**
+- **Modifier**

@@ -273,16 +273,16 @@ def main() -> bool:
     print(f"   Model: {model_id}")
     
     print("   DSPy with Pydantic types: enabled")
-    return True
+    return
 
   except Exception as e:
     # Broad exception to catch potential issues with API connection or model availability
     print(f"\n❌ An unexpected error occurred: {type(e).__name__}: {e}")
     print("\n💡 Make sure your Google Cloud credentials are set up correctly.")
     print("   e.g., run 'gcloud auth application-default login'")
-    return False
+    sys.exit(1)
 
 
 if __name__ == "__main__":
-  SUCCESS = main()
-  sys.exit(0 if SUCCESS else 1)
+  main()
+  sys.exit(0)

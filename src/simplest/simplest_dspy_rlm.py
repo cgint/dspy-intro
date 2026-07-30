@@ -114,10 +114,10 @@ class LogAgentRLMModule(dspy.Module):
         super().__init__()
         self.agent = dspy.RLM(
             signature=LogAnalysis,
-            tools={
-                "get_available_files": get_available_files,
-                "fetch_log_data": fetch_log_data,
-            },
+            tools=[
+                get_available_files,
+                fetch_log_data,
+            ],
             max_iterations=10,
             verbose=True,
         )
