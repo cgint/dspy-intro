@@ -20,7 +20,7 @@ GOOGLE_PROVIDER_LIST = [GOOGLE_PROVIDER_GEMINI, GOOGLE_PROVIDER_VERTEX_AI]
 VERTEX_AI_FALLBACK_MODEL = "gemini-3.5-flash-lite"
 
 def _provider_from_model_name(model_name: str) -> str | None:
-    """Extract provider prefix from model name if present, e.g. 'vertex_ai/gemini-2.5' -> 'vertex_ai'.
+    """Extract provider prefix from model name if present, e.g. 'vertex_ai/gemini-3.5' -> 'vertex_ai'.
     Returns None if no prefix or prefix not in GOOGLE_PROVIDER_LIST.
     """
     prefix: str | None = model_name.split("/")[0] if "/" in model_name else None
