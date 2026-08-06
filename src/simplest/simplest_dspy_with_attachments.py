@@ -2,7 +2,7 @@ import dspy
 from attachments.dspy import Attachments
 from pydantic import BaseModel, Field
 from common.utils import get_lm_for_model_name, dspy_configure
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH
 
 def context_question_answer(ctx: Attachments, question: str) -> str:
     qa = dspy.Predict("context: Attachments, question: str -> answer: str")
@@ -38,7 +38,7 @@ def print_headline_and_answer(headline: str, answer: str):
     print(f"\n{answer}\n")
     
 def main():
-    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable"))
+    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_3_5_FLASH, "disable"))
 
     pdf_url = "src/simplest/docs/simplest_dspy_with_attachments_2507.11299.pdf"
     ctx = Attachments(pdf_url)

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import dspy
 
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH
 from common.utils import dspy_configure, get_lm_for_model_name
 
 
@@ -127,7 +127,7 @@ class LogAgentRLMModule(dspy.Module):
 
 
 def main() -> None:
-    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable"))
+    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_3_5_FLASH, "disable"))
 
     agent = LogAgentRLMModule()
 

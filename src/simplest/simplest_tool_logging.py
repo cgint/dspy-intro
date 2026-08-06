@@ -5,7 +5,7 @@ import sys
 from typing import Any, Dict, List
 from dspy.utils.callback import BaseCallback
 from common.utils import get_lm_for_model_name, dspy_configure
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +247,7 @@ def capture_dspy_inspect_history(n: int = 50) -> str:
 def main():
     """Main function demonstrating DSPy ReAct agent with native tool logging."""
     # Configure DSPy (already sets track_usage=True)
-    lm = get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable")
+    lm = get_lm_for_model_name(MODEL_NAME_GEMINI_3_5_FLASH, "disable")
     dspy_configure(lm)
     
     # Initialize tool tracker

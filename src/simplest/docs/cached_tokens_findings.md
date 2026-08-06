@@ -3,8 +3,8 @@
 ## Summary
 - **Yes**: With DSPy usage tracking enabled, `prediction.get_lm_usage()` can include **`prompt_tokens_details.cached_tokens`** that indicates **implicit context caching** was used.
 - This works for both:
-  - **Vertex AI** (`vertex_ai/gemini-2.5-flash`)
-  - **Gemini API** (`gemini/gemini-2.5-flash`)
+  - **Vertex AI** (`vertex_ai/gemini-3.5-flash`)
+  - **Gemini API** (`gemini/gemini-3.5-flash`)
 - **Important**: Implicit caching is **not guaranteed** (even for the same prompt prefix). It may take multiple repeated calls before `cached_tokens` becomes non-null/non-zero.
 
 ## Diagram
@@ -21,7 +21,7 @@ Observed shape (example):
 
 ```py
 {
-  "vertex_ai/gemini-2.5-flash": {
+  "vertex_ai/gemini-3.5-flash": {
     "prompt_tokens": 19987,
     "completion_tokens": 15,
     "total_tokens": 20002,
@@ -56,8 +56,8 @@ Observed shape (example):
 In this repo, `get_model_access_prefix_or_fail()` (see `src/common/utils.py`) **prefers Vertex** if both credential sets are present.
 
 So to force a provider, pass the explicit prefix in the model string:
-- Gemini API: `gemini/gemini-2.5-flash`
-- Vertex AI: `vertex_ai/gemini-2.5-flash`
+- Gemini API: `gemini/gemini-3.5-flash`
+- Vertex AI: `vertex_ai/gemini-3.5-flash`
 
 ### Minimal script
 This example uses a very long repeated prefix to exceed the threshold, then calls the same module multiple times.
@@ -69,7 +69,7 @@ import dspy
 
 from common.utils import dspy_configure, get_lm_for_model_name
 
-MODEL = "vertex_ai/gemini-2.5-flash"  # or: "gemini/gemini-2.5-flash"
+MODEL = "vertex_ai/gemini-3.5-flash"  # or: "gemini/gemini-3.5-flash"
 
 lm = get_lm_for_model_name(MODEL, reasoning_effort="disable", max_tokens=64)
 dspy_configure(lm, track_usage=True)
@@ -95,13 +95,13 @@ for i in range(1, 6):
 
 ### Observed results (this repo / this environment)
 
-#### Vertex AI (`vertex_ai/gemini-2.5-flash`)
+#### Vertex AI (`vertex_ai/gemini-3.5-flash`)
 - We observed `cached_tokens` becoming **non-null and large** after a few repeated calls.
 - Example observed on a cache hit:
   - `prompt_tokens_details.cached_tokens`: **~19293**
   - `prompt_tokens_details.text_tokens`: **~727** (remaining uncached tokens)
 
-#### Gemini API (`gemini/gemini-2.5-flash`)
+#### Gemini API (`gemini/gemini-3.5-flash`)
 - Also observed `cached_tokens` becoming non-null/non-zero, but it can be **more variable**.
 - Example run showed:
   - call #1: cached_tokens **19252**

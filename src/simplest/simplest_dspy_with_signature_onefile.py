@@ -96,7 +96,7 @@ class DSPyGeminiConfig:
     """Configuration utilities for DSPy with Gemini/Vertex AI."""
 
     MODEL_GEMINI_3_5_FLASH = "gemini-3.5-flash"
-    MODEL_VERTEX_FLASH_LITE = "gemini-2.5-flash-lite"
+    MODEL_VERTEX_FLASH_LITE = "gemini-3.5-flash-lite"
 
     _PROVIDER_GEMINI = "gemini"
     _PROVIDER_VERTEX_AI = "vertex_ai"

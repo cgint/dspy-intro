@@ -2,7 +2,7 @@ import dspy
 from typing import Literal
 
 import mlflow
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH_LITE
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH_LITE
 from common.utils import get_lm_for_model_name, dspy_configure
 mlflow.set_experiment("dspy_agent_classifier_credentials_passwords")
 mlflow.autolog()
@@ -22,7 +22,7 @@ class ClassifierCredentialsPasswordsSignature(dspy.Signature):
 # --- Example Usage ---
 # classifier_lm_model_name = "ollama/gemma3:270m"
 # classifier_lm_reasoning_effort = None # "disable"
-classifier_lm_model_name = MODEL_NAME_GEMINI_2_5_FLASH_LITE
+classifier_lm_model_name = MODEL_NAME_GEMINI_3_5_FLASH_LITE
 classifier_lm_reasoning_effort = "disable"
 classifier_lm = get_lm_for_model_name(classifier_lm_model_name, classifier_lm_reasoning_effort)
 

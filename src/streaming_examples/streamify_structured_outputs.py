@@ -7,7 +7,7 @@ import dspy
 from dspy import streaming
 from pydantic import BaseModel, Field
 
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH
 from common.utils import dspy_configure, get_lm_for_model_name
 from streaming_examples.json_string_stream_decoder import JsonStringStreamDecoder
 
@@ -45,7 +45,7 @@ class FlatDecisionSig(dspy.Signature):
 
 def _configure() -> None:
     # Uses the repo's standard LM+adapter config helper.
-    lm = get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, reasoning_effort="disable", max_tokens=1200)
+    lm = get_lm_for_model_name(MODEL_NAME_GEMINI_3_5_FLASH, reasoning_effort="disable", max_tokens=1200)
     dspy_configure(lm)
 
 

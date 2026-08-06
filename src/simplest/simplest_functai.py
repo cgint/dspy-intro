@@ -1,6 +1,6 @@
 from functai import ai, _ai, configure
 from common.utils import get_model_access_prefix_or_fail
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH
 
 @ai
 def joke_for_john() -> str:
@@ -11,8 +11,8 @@ def joke_funnyness_factor_0_to_10(joke: str) -> int:
     return _ai  # type: ignore[return-value]
 
 def main():
-    model_access_prefix = get_model_access_prefix_or_fail(MODEL_NAME_GEMINI_2_5_FLASH)
-    model_id = "gemini-2.5-flash-lite" if model_access_prefix == "vertex_ai/" else MODEL_NAME_GEMINI_2_5_FLASH
+    model_access_prefix = get_model_access_prefix_or_fail(MODEL_NAME_GEMINI_3_5_FLASH)
+    model_id = "gemini-3.5-flash-lite" if model_access_prefix == "vertex_ai/" else MODEL_NAME_GEMINI_3_5_FLASH
     model_name = f"{model_access_prefix}{model_id}"
     configure(lm=model_name)
 

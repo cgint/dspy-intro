@@ -6,7 +6,7 @@ import pydantic
 
 from dspy.teleprompt import LabeledFewShot
 from common.utils import get_lm_for_model_name
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH
 
 
 # ANSI color codes for CLI output
@@ -223,7 +223,7 @@ def get_trainset() -> list[dspy.Example] | None:
 
 def main() -> bool:
   """Main function to run the prompt component extraction examples."""
-  model_id = MODEL_NAME_GEMINI_2_5_FLASH
+  model_id = MODEL_NAME_GEMINI_3_5_FLASH
   
   print(f"🚀 Testing Prompt Component Extraction with DSPy and {model_id}...")
   print("=" * 60)

@@ -125,7 +125,7 @@ Below are the details and expected outputs of the main examples, preserved for d
 ```python
 import dspy
 from common.utils import get_lm_for_model_name, dspy_configure
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH
 
 def joke_for_john() -> str:
     joker = dspy.Predict("name -> joke")
@@ -138,7 +138,7 @@ def joke_funnyness_factor_0_to_10(joke: str) -> int:
     return funnyness_prediction.funnyness_0_to_10
 
 def main():
-    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable"))
+    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_3_5_FLASH, "disable"))
 
     the_joke: str = joke_for_john()
     print(f"\n\n{the_joke}")

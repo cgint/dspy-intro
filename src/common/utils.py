@@ -1,15 +1,23 @@
 import os
+
 import dspy
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if it exists, overriding existing shell env vars
+load_dotenv(override=True)
+
 from typing import Literal
+
 from common.constants import (
     OLLAMA_MODEL,
-    OLLAMA_OPENAI_BASE_URL,
     OLLAMA_OPENAI_API_KEY,
+    OLLAMA_OPENAI_BASE_URL,
 )
+
 GOOGLE_PROVIDER_GEMINI = "gemini"
 GOOGLE_PROVIDER_VERTEX_AI = "vertex_ai"
 GOOGLE_PROVIDER_LIST = [GOOGLE_PROVIDER_GEMINI, GOOGLE_PROVIDER_VERTEX_AI]
-VERTEX_AI_FALLBACK_MODEL = "gemini-2.5-flash-lite"
+VERTEX_AI_FALLBACK_MODEL = "gemini-3.5-flash-lite"
 
 def _provider_from_model_name(model_name: str) -> str | None:
     """Extract provider prefix from model name if present, e.g. 'vertex_ai/gemini-2.5' -> 'vertex_ai'.

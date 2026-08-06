@@ -5,7 +5,7 @@ import pydantic
 from pathlib import Path
 from typing import Optional
 from common.utils import get_lm_for_model_name, dspy_configure
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH
 
 
 class ContractInfo(pydantic.BaseModel):
@@ -199,7 +199,7 @@ def _run_qa_loop(contracts_data: list[ContractInfo]) -> None:
 
 
 def main():
-    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable", max_tokens=16384))
+    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_3_5_FLASH, "disable", max_tokens=16384))
 
     contracts_dir = _resolve_contracts_dir()
     pdf_files = _validate_dir(contracts_dir)

@@ -41,8 +41,8 @@ uv run python src/simplest/cached_tokens_probe_gemini_vertex.py --provider verte
 - Vertex AI requires: `VERTEXAI_PROJECT` and `VERTEXAI_LOCATION`
 
 The probe uses explicit provider-prefixed model ids, so it can test both in one run (when both credential sets are available):
-- `gemini/gemini-2.5-flash`
-- `vertex_ai/gemini-2.5-flash`
+- `gemini/gemini-3.5-flash`
+- `vertex_ai/gemini-3.5-flash`
 
 ## Observed token statistics (examples from runs in this environment)
 
@@ -53,7 +53,7 @@ uv run python src/simplest/cached_tokens_probe_gemini_vertex.py --provider gemin
 ```
 Observed output:
 ```text
-Provider probe: gemini/gemini-2.5-flash
+Provider probe: gemini/gemini-3.5-flash
  1 | prompt_tokens=20010 cached_tokens=None  text_tokens=20010 completion_tokens=41 total_tokens=20051
  2 | prompt_tokens=20010 cached_tokens=19252 text_tokens=758   completion_tokens=41 total_tokens=20051
 ```
@@ -68,7 +68,7 @@ uv run python src/simplest/cached_tokens_probe_gemini_vertex.py --provider verte
 ```
 Observed output:
 ```text
-Provider probe: vertex_ai/gemini-2.5-flash
+Provider probe: vertex_ai/gemini-3.5-flash
  1 | prompt_tokens=20023 cached_tokens=None  text_tokens=20023 completion_tokens=45 total_tokens=20068
  2 | prompt_tokens=20023 cached_tokens=19293 text_tokens=730   completion_tokens=45 total_tokens=20068
 ```
@@ -83,7 +83,7 @@ uv run python src/simplest/cached_tokens_probe_gemini_vertex.py --provider verte
 ```
 Observed output:
 ```text
-Provider probe: vertex_ai/gemini-2.5-flash
+Provider probe: vertex_ai/gemini-3.5-flash
  1 | prompt_tokens=20024 cached_tokens=None  text_tokens=20024 completion_tokens=46 total_tokens=20070
  2 | prompt_tokens=20024 cached_tokens=19293 text_tokens=731   completion_tokens=46 total_tokens=20070
  3 | prompt_tokens=20024 cached_tokens=None  text_tokens=20024 completion_tokens=46 total_tokens=20070

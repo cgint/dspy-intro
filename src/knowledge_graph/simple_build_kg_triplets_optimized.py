@@ -5,7 +5,7 @@ import dspy
 from dspy.teleprompt.gepa.gepa import GEPAFeedbackMetric
 from dspy.teleprompt.gepa.gepa_utils import ScoreWithFeedback
 from common.utils import dspy_configure, get_lm_for_ollama, get_lm_for_model_name
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH
 
 # Import from examples file
 from knowledge_graph.dspy_agent_triplet_extraction_examples import (
@@ -232,8 +232,8 @@ def main():
     reflection_minibatch_size = limit_testset  # Used in GEPA - when too low then it can loop on seemingly perfect proposed candidates
     
     # Trainer and judge use Gemini Flash
-    trainer_lm = get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, trainer_lm_reasoning_effort)
-    judge_lm = get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, judge_lm_reasoning_effort)
+    trainer_lm = get_lm_for_model_name(MODEL_NAME_GEMINI_3_5_FLASH, trainer_lm_reasoning_effort)
+    judge_lm = get_lm_for_model_name(MODEL_NAME_GEMINI_3_5_FLASH, judge_lm_reasoning_effort)
     
     _, combined_save_path, baseline_score_int, optimized_score_int = optimize_triplet_extractor(
         trainer_lm, judge_lm, auto, limit_trainset, limit_testset, randomize_sets, reflection_minibatch_size

@@ -10,7 +10,7 @@ from classifier_credentials.dspy_agent_classifier_credentials_passwords_examples
     prepare_test_data
 )
 from classifier_credentials.dspy_agent_classifier_credentials_passwords import ClassifierCredentialsPasswords, classifier_lm_model_name, classifier_lm_reasoning_effort
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH
 from common.utils import dspy_configure, get_lm_for_model_name
 from common.mlflow_utils import log_as_table
 
@@ -179,14 +179,14 @@ def test_classifier_examples(classifier, examples_desc="") -> Dict[str, str]:
 
 
 def main():
-    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable"))
+    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_3_5_FLASH, "disable"))
     
     
     formatter_date_now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     with mlflow.start_run(run_name=f"pwd_classifier_{formatter_date_now}"):
         
         # Optimize classifier with
-        trainer_lm_model_name = MODEL_NAME_GEMINI_2_5_FLASH
+        trainer_lm_model_name = MODEL_NAME_GEMINI_3_5_FLASH
         trainer_lm_reasoning_effort: Literal["disable", "low", "medium", "high"] = "disable"
         optimizer_type: Literal["MIPROv2", "GEPA"] = "GEPA"
         auto: Literal["light", "medium", "heavy"] = "heavy"  # <-- We will use a "light" budget for this tutorial. However, we typically recommend using auto="heavy" for optimized performance!

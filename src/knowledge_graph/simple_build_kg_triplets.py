@@ -7,7 +7,7 @@ from pathlib import Path
 from pyvis.network import Network
 
 from common.utils import get_lm_for_model_name, dspy_configure
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH
 from knowledge_graph.markdown_splitter import TextChunk, split_markdown_into_chunks
 from knowledge_graph.prompts import TRIPLET_GENERAL_EXTRACTOR_INSTRUCTIONS
 
@@ -115,7 +115,7 @@ def save_graph_as_html(G: nx.DiGraph, output_file: str = "knowledge_graph.html")
 def main():
     # Configure DSPy
     # dspy_configure(get_lm_for_ollama())
-    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable"))
+    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_3_5_FLASH, "disable"))
     
     # Read the markdown file
     file_path = Path("src/simplest/docs/images/notes-on-linear-and-ai-agents.postprocessed.md")

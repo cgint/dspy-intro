@@ -7,7 +7,7 @@ including whether provider-side implicit caching was used.
 
 We test both providers explicitly by using model ids:
 - Gemini API:  gemini/gemini-3.5-flash
-- Vertex AI:   vertex_ai/gemini-2.5-flash-lite
+- Vertex AI:   vertex_ai/gemini-3.5-flash
 
 Notes
 -----
@@ -178,7 +178,7 @@ def main() -> None:
             print("Skipping Vertex AI probe: VERTEXAI_PROJECT and/or VERTEXAI_LOCATION not set")
             exit_code = max(exit_code, 2)
         else:
-            result = run_probe(model_id="vertex_ai/gemini-2.5-flash-lite", rounds=args.rounds, sleep_s=args.sleep)
+            result = run_probe(model_id="vertex_ai/gemini-3.5-flash", rounds=args.rounds, sleep_s=args.sleep)
             if args.strict:
                 exit_code = max(exit_code, result)
 

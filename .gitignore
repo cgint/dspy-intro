@@ -45,6 +45,8 @@ test-logs/
 test-results/
 mlruns/
 playwright-report/
+dspy_history.txt
+mlflow.db
 
 !.aider.conf.yml
 !.aiderignore

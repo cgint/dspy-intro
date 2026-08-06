@@ -2,7 +2,7 @@ import dspy
 from pathlib import Path
 from PIL import Image
 from common.utils import get_lm_for_model_name, dspy_configure
-from common.constants import MODEL_NAME_GEMINI_2_5_FLASH
+from common.constants import MODEL_NAME_GEMINI_3_5_FLASH
 
 
 class ImageTranscriptionSignature(dspy.Signature):
@@ -90,7 +90,7 @@ def postprocess_image(image_id: str, output_dir: Path):
 
 
 def main():
-    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_2_5_FLASH, "disable"))
+    dspy_configure(get_lm_for_model_name(MODEL_NAME_GEMINI_3_5_FLASH, "disable"))
     
     # Configuration
     input_dir = Path("src/simplest/docs/images")
