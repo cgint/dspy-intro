@@ -15,7 +15,7 @@ from common.utils import dspy_configure, get_lm_for_model_name
 from common.mlflow_utils import log_as_table
 
 mlflow.set_experiment("dspy_agent_classifier_credentials_passwords_optimized")
-mlflow.autolog()
+mlflow.autolog(exclude_flavors=["litellm"])
 # call 'uv run mlflow server --host 127.0.0.1 --port 8182' and head to http://127.0.0.1:8182
 
 # --- Metric for Optimization ---

@@ -5,7 +5,7 @@ import mlflow
 from common.constants import MODEL_NAME_GEMINI_3_5_FLASH_LITE
 from common.utils import get_lm_for_model_name, dspy_configure
 mlflow.set_experiment("dspy_agent_classifier_credentials_passwords")
-mlflow.autolog()
+mlflow.autolog(exclude_flavors=["litellm"])
 # call 'uv run mlflow server --host 127.0.0.1 --port 8182' and head to http://127.0.0.1:8182
 
 # --- Main DSPy Classifier ---

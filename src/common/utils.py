@@ -1,18 +1,17 @@
 import os
+from typing import Literal
 
 import dspy
 from dotenv import load_dotenv
-
-# Load environment variables from .env file if it exists, overriding existing shell env vars
-load_dotenv(override=True)
-
-from typing import Literal
 
 from common.constants import (
     OLLAMA_MODEL,
     OLLAMA_OPENAI_API_KEY,
     OLLAMA_OPENAI_BASE_URL,
 )
+
+# Load environment variables from .env file if it exists, overriding existing shell env vars
+load_dotenv(override=True)
 
 GOOGLE_PROVIDER_GEMINI = "gemini"
 GOOGLE_PROVIDER_VERTEX_AI = "vertex_ai"

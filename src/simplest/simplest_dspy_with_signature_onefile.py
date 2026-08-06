@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
-# dependencies = ["dspy", "pydantic", "google-cloud-aiplatform"]
+# dependencies = ["dspy", "pydantic", "google-cloud-aiplatform", "python-dotenv"]
 # ///
 """
 Self-contained DSPy example: Extract Q&A pairs from text for dataset creation.
@@ -20,6 +20,10 @@ from typing import Literal
 
 import dspy
 import pydantic
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if it exists, overriding existing shell env vars
+load_dotenv(override=True)
 
 
 # =============================================================================
