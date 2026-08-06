@@ -1,6 +1,7 @@
 # Think about syncing .dockerignore and .gitignore files.
 
 mlruns/
+mlflow.db
 *.json
 lib/
 knowledge_graph*.jsonl
