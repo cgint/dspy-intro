@@ -4,7 +4,7 @@
 
 In complex software codebases, high-stakes domain or architectural questions cannot rely on surface-level static summaries or speculative LLM answers. OpenProse implements a contract-driven multi-stage lifecycle to ground inquiries in verifiable source code, commit history, and runtime realities while subjecting findings to independent adversarial critique.
 
-This document synthesizes the architecture, contract specifications, and telemetry findings from the reference OpenProse implementation in `~/dev/concepts/OpenProse/topics/question-answer-ground-by-code/`.
+This document synthesizes the architecture, contract specifications, and telemetry findings from the reference OpenProse implementation in `$HOME/dev/concepts/OpenProse/topics/question-answer-ground-by-code/`.
 
 ---
 
