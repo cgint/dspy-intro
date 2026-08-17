@@ -1,30 +1,31 @@
-You are an expert in well crafted and maintainable code while keeping the key principles in mind.
+# Key Principles & Coding Guidelines for DSPy Projects
 
-These are coding guidelines best practives for svelte kit application with web frontend and rest-api backend where the backend is server side rendered.
+You are an expert in well-crafted, maintainable, and typed Python software incorporating DSPy and LLM components.
 
-# Key Principles
+For the higher-level engineering stance and architectural rationale, see [PHILOSOPHY.md](PHILOSOPHY.md).
 
-* Write concise, technical responses with accurate examples.
-* Use functional, declarative programming; use classes where possible.
-* Follow separation of concerns principles to make it easier to replace parts of the system with other implementations as the task at hand will evolve.
-* Write well crafted and maintainable code yet do not over engineer.
-* Use TypeScript with strict mode enabled for better type safety and maintainability.
-* Structure code in a modular way with clear separation of concerns and responsibilities.
-* Keep code readable and maintainable through consistent formatting and documentation.
-* Write comprehensive tests that serve as specifications for features and changes.
-* Use test-driven development (TDD) to guide implementation of new features.
-* Maintain high test coverage while focusing on critical business logic.
+---
 
-# Error Handling and Validation
+## 1. Core Engineering Discipline
 
-* Prioritize error handling and edge cases:
-* Handle errors and edge cases at the beginning of functions.
-* Use early returns for error conditions to avoid deeply nested if statements.
-* Place the happy path last in the function for improved readability.
-* Implement proper error logging and user-friendly error messages.
-* Use custom error types or error factories for consistent error handling.
+* **Deterministic by Default:** Keep flow control, business logic, validation, and storage deterministic in Python. Call LLMs only for fuzzy classification, extraction, or semantic tasks.
+* **Separation of Concerns:** Keep DSPy signatures, modules, evaluation metrics, and runtime orchestration decoupled.
+* **Type Safety First:** Use modern Python type hints (Python 3.12+ / 3.13) and Pydantic models for all signature inputs and outputs.
+* **No Unbounded Agents for Narrow Tasks:** Prefer single-purpose DSPy predictors (`Predict`, `ChainOfThought`, `Refine`) over heavy open-ended agentic loops.
+* **Test & Metric-Driven:** Every DSPy module should have an associated dataset/examples and an evaluation metric function (e.g. 0/1 accuracy, precision/recall, exact match).
 
-# External libraries
+---
 
-* When using external libraries like bootstrap we do not refer to them in their CDN version but self hosted
-* Never use Google-Fonts
+## 2. DSPy Design Best Practices
+
+* **Clean Signatures:** Define signatures using explicit `dspy.InputField` and `dspy.OutputField` or Pydantic models. Avoid cramming behavioral begging into signature descriptions.
+* **Decouple Interfaces from Optimization:** Let signatures describe *what* is needed. Use optimizers (MIPROv2, BootstrapFewShot, etc.) to learn the *how*.
+* **Validation & Retry Seams:** Leverage Pydantic and DSPy assertion / reward loops (`dspy.Suggest`, `dspy.Assert`, or reward refinement) to handle ill-formatted outputs deterministically.
+
+---
+
+## 3. Environment & Tooling Guidelines
+
+* **Fast Dependency Management:** Standardize on `uv` for package and environment management.
+* **Self-Contained CLI Scripts:** For standalone tools and visual/evaluation helpers, use single-file scripts with PEP 723 inline metadata executable via `uv run script.py`.
+* **Linting & Formatting:** Adhere to `ruff` rules and strict type checking via `mypy`.
