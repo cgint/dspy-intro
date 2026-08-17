@@ -4,6 +4,8 @@ Welcome! If you have no prior experience with DSPy or FunctAI, this repository i
 
 Unlike traditional prompt engineering (which relies on manually editing long strings of text), **DSPy** lets you define your inputs and outputs programmatically, and then automatically compiles/optimizes the prompts for you.
 
+📖 **Read our core engineering stance:** [Engineering Philosophy: Why DSPy?](PHILOSOPHY.md) (Deterministic Systems vs. Monolithic Agents, Ending "Prompt Begging", and Surgical Tooling).
+
 ---
 
 ## 🚀 3-Minute Quick Start
