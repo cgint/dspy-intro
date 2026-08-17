@@ -46,44 +46,44 @@ This will call Google Gemini, generate a joke for "John", and then evaluate how 
 
 ---
 
-## 💡 Core Concepts: What is DSPy?
+## 💡 Core Concepts & The Learning Ladder
 
-In classic LLM development, you write a string prompt like `"Please write a joke about {name}."`
-In DSPy, we define a **Signature** instead.
+DSPy shifts LLM development from manual string prompt engineering to **modular, typed, and optimizable software pipelines**.
 
-Look at this snippet from `src/simplest/simplest_dspy.py`:
+To help you learn DSPy progressively without feeling overwhelmed, the examples in this repo are organized as a **7-step ladder of complexity**. Each step introduces exactly one new DSPy concept to solve a real-world software problem:
 
-```python
-# "name -> joke" tells DSPy:
-# - Input parameter: name
-# - Expected output parameter: joke
-joker = dspy.Predict("name -> joke")
-the_joke_prediction = joker(name="John")
+```text
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ Level 6/7: Auto-Optimizers & Verification (MIPROv2, GEPA, Metrics)              │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ Level 5: Multi-Stage Pipelines (Ingress ➔ Audit ➔ Reconcile — src/workflow/)     │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ Level 4: Tool Calling & ReAct (dspy.ReAct with Python functions)                │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ Level 3: Step-by-Step Reasoning (dspy.ChainOfThought)                           │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ Level 2: Type Safety & Extraction (dspy.Signature + Pydantic types)             │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ Level 1: Minimal Predictor (dspy.Predict("input -> output") — zero ceremony)    │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
-
-And to force structured outputs with types, we can do:
-```python
-# The ": int" suffix forces the LLM to output a clean integer
-funnyness_evaluator = dspy.Predict("joke -> funnyness_0_to_10: int")
-```
-DSPy automatically constructs the underlying system prompts, parses the outputs, and formats them into python types for you behind the scenes.
 
 ---
 
-## 📂 Runnable Examples in this Repo
+## 📂 Progressive Learning Path (Runnable Examples)
 
-We have several console scripts defined in `pyproject.toml`. You can run any of them using `uv run <script-name>`:
+Follow these runnable examples in order to build your understanding step-by-step:
 
-| Script Command | File Path | What it does |
-| :--- | :--- | :--- |
-| **`uv run simplestdspy`** | `src/simplest/simplest_dspy.py` | Generates a joke and rates its funnyness using simple DSPy signatures. |
-| **`uv run simplestdspyattach`** | `src/simplest/simplest_dspy_with_attachments.py` | Extracts structured key takeaways and summaries directly from a PDF file. |
-| **`uv run simplestdspyrlm`** | `src/simplest/simplest_dspy_rlm.py` | Runs a sandboxed agent with sandboxed Python REPL tools. |
-| **`uv run password`** | `src/classifier_credentials/...` | Classifies whether text inputs contain exposed credentials (e.g., outputs "safe" or "unsafe"). |
-| **`uv run optimizer`** | `src/classifier_credentials/...` | Uses DSPy Optimizers (GEPA / MIPROv2) to automatically refine the classification prompts using training data. |
-| **`uv run simplestfunctai`** | `src/simplest/simplest_functai.py` | Demonstrates **FunctAI**, which wraps python functions into type-safe LLM calls. |
-| **`uv run extractprompt`** | `src/text_component_extract/...` | Extracts Persona, Task, Context, and Format from any arbitrary text block. |
-| **`uv run extractgrammatical`** | `src/text_component_extract/...` | Extracts Subject, Verb, Object, and Modifier grammatical components from sentences. |
+| Level | What you learn | Script Command | Source File / Directory |
+| :--- | :--- | :--- | :--- |
+| **Level 1** | **Zero-Ceremony Prediction:** Call LLMs without string prompts or template formatting. | `uv run simplestdspy` | `src/simplest/simplest_dspy.py` |
+| **Level 2** | **Structured Outputs & Types:** Enforce return types (`: int`, Pydantic models, JSON extraction). | `uv run extractprompt`<br>`uv run extractgrammatical` | `src/text_component_extract/` |
+| **Level 2b** | **Multimodal / Documents:** Extract structured insights directly from PDFs/attachments. | `uv run simplestdspyattach` | `src/simplest/simplest_dspy_with_attachments.py` |
+| **Level 3** | **Chain of Thought:** Inject automatic step-by-step reasoning (`Rationale: ...`) into classification. | `uv run password` | `src/classifier_credentials/` |
+| **Level 4** | **ReAct & External Tools:** Give LLMs access to native Python tools and REPL sandboxes. | `uv run simplestdspyrlm` | `src/simplest/simplest_dspy_rlm.py` |
+| **Level 5** | **Multi-Stage Orchestration:** Multi-role code grounding & adversarial audit (OpenProse pattern). | *Documented Architecture* | `src/workflow/` |
+| **Level 6** | **Function Wrappers (FunctAI):** Wrap standard Python callables into type-safe LLM tasks. | `uv run simplestfunctai` | `src/simplest/simplest_functai.py` |
+| **Level 7** | **Self-Optimizing Prompts:** Automatically discover instructions & few-shot examples via MIPROv2/GEPA. | `uv run optimizer` | `src/classifier_credentials/` |
 
 ---
 
@@ -105,11 +105,13 @@ DSPy can track its inputs, outputs, and intermediate states. To inspect what was
 ├── pyproject.toml                         # Project configuration, scripts, and dependencies
 ├── src
 │   ├── simplest                           # Minimal, high-clarity entry points (start here!)
-│   │   ├── simplest_dspy.py               # Basic jokes example
-│   │   ├── simplest_dspy_with_attachments.py # PDF processing example
-│   │   └── simplest_functai.py            # FunctAI implementation
-│   ├── classifier_credentials              # More advanced password classifier & training loop
-│   ├── text_component_extract             # Text parser/extractor examples
+│   │   ├── simplest_dspy.py               # Basic jokes example (Level 1)
+│   │   ├── simplest_dspy_with_attachments.py # PDF processing example (Level 2b)
+│   │   ├── simplest_dspy_rlm.py           # Sandboxed REPL tools (Level 4)
+│   │   └── simplest_functai.py            # FunctAI implementation (Level 6)
+│   ├── text_component_extract             # Text parser & structured extraction (Level 2)
+│   ├── classifier_credentials             # Password classifier & MIPROv2 training loop (Level 3 & 7)
+│   ├── workflow                           # Advanced 4-stage OpenProse code-grounded QA workflow (Level 5)
 │   └── common                             # Shared helpers (LLM connections, configurations)
 ```
 
