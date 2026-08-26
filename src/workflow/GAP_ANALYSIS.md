@@ -209,9 +209,11 @@ map above and from the historical read-only verdicts in §7.
   with null certainty, while complete/empty ledgers retain calibrated success. Protected
   mission `src/workflow/mini-swe-missions/G10-unresolved-proposal-failure.json` limits
   future edits to schema/flow/workflow tests and binds oracle
-  `src/workflow/mini-swe-acceptance/G10-unresolved-proposal-failure.py`; baseline is
-  pytest rc1 with `G10_UNRESOLVED_PROPOSAL_FAILURE`. G10 is not implemented, run,
-  accepted, or closed.
+  `src/workflow/mini-swe-acceptance/G10-unresolved-proposal-failure.py`. The original
+  `cdf4d01` annotation-only oracle is rejected before live use as schema theatre;
+  its behavioral public-flow replacement is baseline-proven at pytest rc1 with
+  `G10_UNRESOLVED_PROPOSAL_FAILURE` and pins its hash in readiness. G10 is not
+  implemented, run, accepted, or closed.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in

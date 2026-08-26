@@ -924,6 +924,12 @@ def test_real_g10_mission_binds_unresolved_proposal_failure_oracle_contract():
     oracle_path = root / "src/workflow/mini-swe-acceptance/G10-unresolved-proposal-failure.py"
     assert mission_path.is_file(), "G10_MISSION_MISSING"
     assert oracle_path.is_file(), "G10_UNRESOLVED_PROPOSAL_ORACLE_MISSING"
+    assert __import__("hashlib").sha256(oracle_path.read_bytes()).hexdigest() == "a0a50f6991e99fa70c48da1f8c5cd8768d4051d4906fab3e9e73db7f027febd6"
+    runner = runner_module()
+    mission = runner.load_mission_file(mission_path, root, "test")
+    assert mission.allowed_paths == ["src/workflow/schemas.py", "src/workflow/flow.py", "tests/test_workflow.py"]
+    assert mission.acceptance_expected_red_text == "G10_UNRESOLVED_PROPOSAL_FAILURE"
+    assert mission.ruff_check_argv == [str(root / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "src/workflow/schemas.py", "src/workflow/flow.py", "tests/test_workflow.py"]
 
 
 def test_proposal_guidance_requires_import_bindings_before_use():
