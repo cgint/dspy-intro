@@ -1,0 +1,14 @@
+{
+  "mission_id": "G10-unresolved-proposal-failure",
+  "goal": "Implement only deterministic unresolved-proposal failure semantics: every ledger proposal ID must be adopted or rejected; unresolved IDs yield status rejected-unaddressed-proposals with certainty_score null, while fully resolved or empty ledgers yield reconciled-and-calibrated with certainty 0..5. Do not add rejection reasons, criticality, thresholds, durability, or model judgment.",
+  "allowed_paths": ["src/workflow/schemas.py", "src/workflow/flow.py", "tests/test_workflow.py"],
+  "focused_test_argv": ["${REPO_VENV_PYTHON}", "-m", "pytest", "-p", "no:cacheprovider", "tests/test_workflow.py", "-q"],
+  "full_test_argv": ["${REPO_VENV_PYTHON}", "-m", "pytest", "-p", "no:cacheprovider", "tests", "-q"],
+  "ruff_check_argv": ["${REPO_VENV_PYTHON}", "-m", "ruff", "check", "--no-cache", "src/workflow/schemas.py", "src/workflow/flow.py", "tests/test_workflow.py"],
+  "acceptance_test_path": "src/workflow/mini-swe-acceptance/G10-unresolved-proposal-failure.py",
+  "acceptance_expected_red_text": "G10_UNRESOLVED_PROPOSAL_FAILURE",
+  "expected_red_text": "G10_UNRESOLVED_PROPOSAL_FAILURE",
+  "expected_red_returncode": 1,
+  "max_attempts": 1,
+  "timeout_seconds": 120
+}

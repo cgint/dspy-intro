@@ -67,7 +67,7 @@ Every gap below should be read against *which* OpenProse it is measured against.
 | G7  | Rejection reasons                                            | ✅`rejected_proposals: [{id, rejection_reason}]`                                          | ⚠️ Flat list of IDs, no reasons                                    | **Medium**           |
 | G8  | No-5/5-if-declared-risk invariant                            | ✅ Hard rule in Stage 4 contract                                                            | ✅ `5829cf7` model enforcement and protected acceptance              | **Closed** |
 | G9  | Certainty threshold gate                                     | ✅`certainty_threshold` pattern param (default 4/5)                                       | ❌ No threshold concept                                              | **Medium**           |
-| G10 | First-class failure state                                    | ✅`kind: test` → `status: "rejected-unaddressed-proposals"`, `certainty_score: null` | ❌ No "inconclusive" terminal outcome                                | **Medium**           |
+| G10 | First-class failure state                                    | ✅`kind: test` → `status: "rejected-unaddressed-proposals"`, `certainty_score: null` | ⚠️ Protected mission/oracle baseline-proven; product behavior absent | **Medium — in progress** |
 | G11 | Deterministic diagram gate                                   | ✅`d2to.sh` exit-0, SVG embedded                                                          | ⚠️ Heuristic brace/regex check; real compile only if`d2` on PATH | **Medium**           |
 | G12 | `call_tree.event_subscribers`                              | ✅ Present                                                                                  | ✅ Present/closed in commit `2c7539a`                              | **Closed**           |
 | G13 | Reactive re-execution (standing truth, subscriptions, wakes) | ✅ Reactor:`Requires`/`Continuity`, world-model, receipts                               | ❌ Single synchronous`forward()` pass                              | **High (by design)** |
@@ -203,6 +203,15 @@ map above and from the historical read-only verdicts in §7.
   SHA `f1d276632f6bf2351cf4717a8c14536f1f3585a6bcb8cc32db8dd3799f791887` matching the
   accepted binding. It emitted zero candidates, so no learner review or promotion is
   pending. No retry, product repair, semantic expansion, or commit is authorized.
+- **G10 selected; protected unresolved-proposal failure infrastructure prepared.**
+  Producer semantics are deterministic and independent of G7: every ledger proposal ID
+  must be adopted or rejected; unresolved IDs yield `rejected-unaddressed-proposals`
+  with null certainty, while complete/empty ledgers retain calibrated success. Protected
+  mission `src/workflow/mini-swe-missions/G10-unresolved-proposal-failure.json` limits
+  future edits to schema/flow/workflow tests and binds oracle
+  `src/workflow/mini-swe-acceptance/G10-unresolved-proposal-failure.py`; baseline is
+  pytest rc1 with `G10_UNRESOLVED_PROPOSAL_FAILURE`. G10 is not implemented, run,
+  accepted, or closed.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in

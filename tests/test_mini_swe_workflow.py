@@ -918,6 +918,14 @@ def test_ruff_audit_terminal_rejects_all_bad_evidence(tmp_path):
     assert all(runner.decide_terminal(base.model_copy(update=update)).reason == "RUFF_CHECK_FAILED" for update in variants)
 
 
+def test_real_g10_mission_binds_unresolved_proposal_failure_oracle_contract():
+    root = RUNNER_PATH.parents[2]
+    mission_path = root / "src/workflow/mini-swe-missions/G10-unresolved-proposal-failure.json"
+    oracle_path = root / "src/workflow/mini-swe-acceptance/G10-unresolved-proposal-failure.py"
+    assert mission_path.is_file(), "G10_MISSION_MISSING"
+    assert oracle_path.is_file(), "G10_UNRESOLVED_PROPOSAL_ORACLE_MISSING"
+
+
 def test_proposal_guidance_requires_import_bindings_before_use():
     runner = runner_module()
     guidance = runner.ProposeEditsSignature.__doc__ or ""
