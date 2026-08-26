@@ -916,3 +916,75 @@ def test_ruff_audit_terminal_rejects_all_bad_evidence(tmp_path):
         {"ruff_candidate": good.model_copy(update={"returncode": 1})},
     ]
     assert all(runner.decide_terminal(base.model_copy(update=update)).reason == "RUFF_CHECK_FAILED" for update in variants)
+
+
+def test_command_mutation_audit_snapshot_detects_file_and_symlink_identity(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    before = runner._snapshot_workspace(repo)
+    (repo / "source.py").write_text("changed\n")
+    assert runner._changed_paths(before, runner._snapshot_workspace(repo)) == {"source.py"}
+    before = runner._snapshot_workspace(repo)
+    (repo / "source.py").chmod(0o700)
+    assert runner._changed_paths(before, runner._snapshot_workspace(repo)) == {"source.py"}
+    before = runner._snapshot_workspace(repo)
+    (repo / "created.py").write_text("created\n")
+    (repo / "check.py").unlink()
+    (repo / "source.py").rename(repo / "renamed.py")
+    assert runner._changed_paths(before, runner._snapshot_workspace(repo)) == {"check.py", "created.py", "source.py", "renamed.py"}
+    before = runner._snapshot_workspace(repo)
+    (repo / "link.py").symlink_to("created.py")
+    assert runner._changed_paths(before, runner._snapshot_workspace(repo)) == {"link.py"}
+    before = runner._snapshot_workspace(repo)
+    (repo / "link.py").unlink()
+    (repo / "link.py").symlink_to("renamed.py")
+    assert runner._changed_paths(before, runner._snapshot_workspace(repo)) == {"link.py"}
+
+
+@pytest.mark.parametrize("kind, returncode, timed_out", [("rc1", 1, False), ("timeout", None, True)])
+def test_command_mutation_audit_preserves_result_and_event_order(tmp_path, monkeypatch, kind, returncode, timed_out):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    ruff = [str(repo / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "source.py", "check.py"]
+    mission = make_mission(runner, repo).model_copy(update={"ruff_check_argv": ruff})
+    original = runner.run_allowed_command
+    def mutate(argv, *args):
+        if argv == ruff:
+            (repo / "source.py").write_text("command mutation\n")
+            return runner.CommandResult(argv=argv, allowed=True, returncode=returncode, stdout="", stderr="", timed_out=timed_out)
+        return original(argv, *args)
+    monkeypatch.setattr(runner, "run_allowed_command", mutate)
+    result = runner.MiniSWEWorkflow(mission, tmp_path / kind, investigation_source=lambda _m: pytest.fail("source called")).run()
+    assert result.reason == "COMMAND_MUTATION"
+    events = [json.loads(line) for line in result.ledger_path.read_text().splitlines()]
+    command = next(i for i, event in enumerate(events) if event["event"] == "command" and event["payload"]["phase"] == "baseline_ruff")
+    mutation = events[command + 1]
+    assert mutation["event"] == "command_mutation"
+    assert mutation["payload"] == {"phase": "baseline_ruff", "argv": ruff, "changed_paths": ["source.py"], "returncode": returncode, "timed_out": timed_out}
+
+
+def test_command_mutation_audit_candidate_rollback_order_and_residual_outside_file(tmp_path, monkeypatch):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    ruff = [str(repo / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "source.py", "check.py"]
+    mission = make_mission(runner, repo).model_copy(update={"ruff_check_argv": ruff})
+    source_before = (repo / "source.py").read_text()
+    original, calls = runner.run_allowed_command, 0
+    def mutate_candidate(argv, *args):
+        nonlocal calls
+        if argv == ruff:
+            calls += 1
+            if calls == 2:
+                (repo / "source.py").write_text("command mutation\n")
+                (repo / "outside.txt").write_text("unowned\n")
+        return original(argv, *args)
+    monkeypatch.setattr(runner, "run_allowed_command", mutate_candidate)
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "candidate", **sources(runner, successful_proposal(runner, repo))).run()
+    assert result.reason == "COMMAND_MUTATION"
+    assert (repo / "source.py").read_text() == source_before
+    assert (repo / "outside.txt").read_text() == "unowned\n"
+    events = [json.loads(line) for line in result.ledger_path.read_text().splitlines()]
+    command = next(i for i, event in enumerate(events) if event["event"] == "command" and event["payload"]["phase"] == "candidate_ruff")
+    assert events[command + 1]["event"] == "command_mutation"
+    assert events[command + 1]["payload"]["changed_paths"] == ["outside.txt", "source.py"]
+    assert any(event["event"] == "rollback" for event in events)

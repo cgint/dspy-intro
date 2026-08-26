@@ -128,10 +128,15 @@ map above and from the historical read-only verdicts in §7.
   baseline/RED/GREEN pytest, Ruff, and protected-acceptance command through an
   immutable-command wrapper: it snapshots before/after, records `command` then
   `command_mutation`, and blocks `COMMAND_MUTATION` regardless of command rc/timeout.
-  The repaired provider-free audit is green (7 cases): loader placeholder/backcompat,
-  strict shape/allow-list, baseline/candidate timeout, baseline/candidate mutation and
-  targeted candidate rollback, and terminal evidence. G8 product targets remain clean,
-  open, and unauthorized for re-entry.
+  The repair's preserved RED was the earlier 3-failed/4-passed Ruff audit; its TDD
+  follow-up audit is green (7 cases): loader placeholder/backcompat, strict
+  shape/allow-list, baseline/candidate timeout, baseline/candidate mutation and
+  targeted candidate rollback, and terminal evidence. A later tests-only
+  post-implementation audit is also green (4 cases): file/mode/create/delete/rename
+  and symlink identity snapshots; rc1/timeout mutation precedence plus exact trace
+  ordering; candidate owned-preimage restoration; and persistent reported unowned
+  out-of-scope output. G8 product targets remain clean, open, and unauthorized for
+  re-entry.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in
