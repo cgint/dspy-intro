@@ -1,0 +1,29 @@
+{
+  "mission_id": "G12-event-subscribers",
+  "goal": "Restore G12 parity: add CallTree.event_subscribers as a typed Stage-2 discovery field. First create a focused pytest assertion that fails because the field is absent, then apply the smallest production schema edit that makes focused and full pytest green.",
+  "allowed_paths": [
+    "tests/test_workflow.py",
+    "src/workflow/schemas.py"
+  ],
+  "focused_test_argv": [
+    "${REPO_VENV_PYTHON}",
+    "-m",
+    "pytest",
+    "-p",
+    "no:cacheprovider",
+    "tests/test_workflow.py",
+    "-q"
+  ],
+  "full_test_argv": [
+    "${REPO_VENV_PYTHON}",
+    "-m",
+    "pytest",
+    "-p",
+    "no:cacheprovider",
+    "-q"
+  ],
+  "expected_red_text": "event_subscribers",
+  "expected_red_returncode": 1,
+  "max_attempts": 1,
+  "timeout_seconds": 120
+}

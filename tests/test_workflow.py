@@ -32,6 +32,7 @@ def test_schema_instantiation_and_validation():
             entry_point="CampaignController.pause",
             intermediate_services=["CampaignService"],
             event_publishers=["CampaignPausedEvent"],
+            event_subscribers=["CampaignSubscriber"],
             leaf_mutations=["UPDATE campaigns SET status='PAUSED'"]
         ),
         git_intent_summary="Added atomic pause flag",
@@ -40,6 +41,7 @@ def test_schema_instantiation_and_validation():
         diagram_d2="controller -> service -> db"
     )
     assert len(baseline.call_tree.leaf_mutations) == 1
+    assert "CampaignSubscriber" in baseline.call_tree.event_subscribers
 
     proposal = Proposal(
         proposal_id="PROP-001",

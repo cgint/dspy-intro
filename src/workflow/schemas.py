@@ -25,6 +25,7 @@ class CallTree(BaseModel):
     entry_point: str = Field(..., description="Starting API, controller, or event trigger")
     intermediate_services: List[str] = Field(default_factory=list, description="Services traversed in forward flow")
     event_publishers: List[str] = Field(default_factory=list, description="Events emitted")
+    event_subscribers: List[str] = Field(default_factory=list, description="Events subscribed to")
     leaf_mutations: List[str] = Field(default_factory=list, description="External side-effects or DB writes")
 
 
