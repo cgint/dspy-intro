@@ -752,3 +752,24 @@ def test_real_g5_mission_binds_stable_protected_oracle_contract():
         str(root / ".venv/bin/python"), "-m", "pytest", "-p", "no:cacheprovider",
         "src/workflow/mini-swe-acceptance/G5-structured-git-archeology.py", "-q",
     ]
+
+
+def test_real_g8_mission_binds_protected_declared_risk_oracle_contract():
+    runner = runner_module()
+    root = RUNNER_PATH.parents[2]
+    mission_path = root / "src/workflow/mini-swe-missions/G8-declared-risk-certainty.json"
+    oracle_path = root / "src/workflow/mini-swe-acceptance/G8-declared-risk-certainty.py"
+    assert mission_path.is_file(), "G8_MISSION_MISSING"
+    assert oracle_path.is_file(), "G8_DECLARED_RISK_ORACLE_MISSING"
+    mission = runner.load_mission_file(mission_path, root, "gemini/gemini-3.5-flash-lite")
+    assert mission.allowed_paths == ["src/workflow/schemas.py", "tests/test_workflow.py"]
+    assert mission.expected_red_text == "G8_UNVERIFIED_CANNOT_BE_FIVE"
+    assert mission.acceptance_test_path == "src/workflow/mini-swe-acceptance/G8-declared-risk-certainty.py"
+    assert mission.acceptance_expected_red_text == "G8_UNVERIFIED_CANNOT_BE_FIVE"
+    assert mission.full_test_argv == [str(root / ".venv/bin/python"), "-m", "pytest", "-p", "no:cacheprovider", "tests", "-q"]
+    artifact = runner.validate_acceptance_artifact(root, mission.allowed_paths, mission.acceptance_test_path)
+    assert artifact.sha256 == "0f498025e9f520b41c33c95a63501a205d41d516a8cc9979a4f22e30a0274d0f"
+    assert runner.acceptance_pytest_argv(root, mission.acceptance_test_path) == [
+        str(root / ".venv/bin/python"), "-m", "pytest", "-p", "no:cacheprovider",
+        "src/workflow/mini-swe-acceptance/G8-declared-risk-certainty.py", "-q",
+    ]

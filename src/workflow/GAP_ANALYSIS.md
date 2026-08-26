@@ -65,7 +65,7 @@ Every gap below should be read against *which* OpenProse it is measured against.
 | G5  | Git archaeology (structured)                                 | ✅`relevant_commits`, `author_intent_summary`, `intent_vs_code_gap`                   | ✅ Present/closed in commit `6c38160`                              | **Closed**           |
 | G6  | Operational telemetry                                        | ✅`production_telemetry` (3 fields) + `ui_origin_endpoint`                              | ❌ Absent from schema                                                | **Medium**           |
 | G7  | Rejection reasons                                            | ✅`rejected_proposals: [{id, rejection_reason}]`                                          | ⚠️ Flat list of IDs, no reasons                                    | **Medium**           |
-| G8  | No-5/5-if-unverified invariant                               | ✅ Hard rule in Stage 4 contract                                                            | ⚠️ Docstring only, not enforced                                    | **Medium**           |
+| G8  | No-5/5-if-declared-risk invariant                            | ✅ Hard rule in Stage 4 contract                                                            | ⚠️ Protected mission prepared; model enforcement not yet implemented | **Medium — in progress** |
 | G9  | Certainty threshold gate                                     | ✅`certainty_threshold` pattern param (default 4/5)                                       | ❌ No threshold concept                                              | **Medium**           |
 | G10 | First-class failure state                                    | ✅`kind: test` → `status: "rejected-unaddressed-proposals"`, `certainty_score: null` | ❌ No "inconclusive" terminal outcome                                | **Medium**           |
 | G11 | Deterministic diagram gate                                   | ✅`d2to.sh` exit-0, SVG embedded                                                          | ⚠️ Heuristic brace/regex check; real compile only if`d2` on PATH | **Medium**           |
@@ -86,6 +86,16 @@ map above and from the historical read-only verdicts in §7.
 - **G12 closed/committed.** Commit `2c7539a` adds
   `CallTree.event_subscribers` and its test coverage in
   `src/workflow/schemas.py` and `tests/test_workflow.py`.
+- **G8 selected; protected implementation infrastructure prepared.** The selected
+  scope is only declared-risk consistency: a future `ReconciledVerdict` model-level
+  invariant must reject `certainty_score=5` with one or more nonempty
+  `residual_risks` using `G8_UNVERIFIED_CANNOT_BE_FIVE`, while preserving score 5
+  with default/empty risks and score 4 with either risk state. The protected oracle
+  `src/workflow/mini-swe-acceptance/G8-declared-risk-certainty.py` is outside future
+  editable paths and baseline-proven at pytest rc1 with that marker; mission
+  `src/workflow/mini-swe-missions/G8-declared-risk-certainty.json` is ready for a
+  future protected run. This does not discover risks, establish risk completeness,
+  add fields, or close G8; no G8 implementation has run or been accepted.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in

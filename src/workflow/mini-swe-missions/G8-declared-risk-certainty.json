@@ -1,0 +1,32 @@
+{
+  "mission_id": "G8-declared-risk-certainty",
+  "goal": "Enforce only declared-risk consistency in ReconciledVerdict: certainty_score 5 is invalid when one or more nonempty residual_risks are declared; score 5 with empty/default risks and score 4 with either empty or nonempty risks remain valid. Do not claim discovery, completeness, whitespace normalization, telemetry, flow/signature changes, or any new fields.",
+  "allowed_paths": [
+    "src/workflow/schemas.py",
+    "tests/test_workflow.py"
+  ],
+  "focused_test_argv": [
+    "${REPO_VENV_PYTHON}",
+    "-m",
+    "pytest",
+    "-p",
+    "no:cacheprovider",
+    "tests/test_workflow.py",
+    "-q"
+  ],
+  "full_test_argv": [
+    "${REPO_VENV_PYTHON}",
+    "-m",
+    "pytest",
+    "-p",
+    "no:cacheprovider",
+    "tests",
+    "-q"
+  ],
+  "acceptance_test_path": "src/workflow/mini-swe-acceptance/G8-declared-risk-certainty.py",
+  "acceptance_expected_red_text": "G8_UNVERIFIED_CANNOT_BE_FIVE",
+  "expected_red_text": "G8_UNVERIFIED_CANNOT_BE_FIVE",
+  "expected_red_returncode": 1,
+  "max_attempts": 1,
+  "timeout_seconds": 120
+}
