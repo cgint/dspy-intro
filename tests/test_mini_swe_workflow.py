@@ -767,9 +767,74 @@ def test_real_g8_mission_binds_protected_declared_risk_oracle_contract():
     assert mission.acceptance_test_path == "src/workflow/mini-swe-acceptance/G8-declared-risk-certainty.py"
     assert mission.acceptance_expected_red_text == "G8_UNVERIFIED_CANNOT_BE_FIVE"
     assert mission.full_test_argv == [str(root / ".venv/bin/python"), "-m", "pytest", "-p", "no:cacheprovider", "tests", "-q"]
+    assert mission.ruff_check_argv == [
+        str(root / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache",
+        "src/workflow/schemas.py", "tests/test_workflow.py",
+    ]
     artifact = runner.validate_acceptance_artifact(root, mission.allowed_paths, mission.acceptance_test_path)
     assert artifact.sha256 == "0f498025e9f520b41c33c95a63501a205d41d516a8cc9979a4f22e30a0274d0f"
     assert runner.acceptance_pytest_argv(root, mission.acceptance_test_path) == [
         str(root / ".venv/bin/python"), "-m", "pytest", "-p", "no:cacheprovider",
         "src/workflow/mini-swe-acceptance/G8-declared-risk-certainty.py", "-q",
     ]
+
+
+def test_ruff_gate_mission_expansion_and_exact_safe_shape(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    ruff = [str(repo / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "source.py", "check.py"]
+    mission = make_mission(runner, repo).model_copy(update={"ruff_check_argv": ruff})
+    assert runner._is_safe_ruff(mission.ruff_check_argv, repo)
+    for argv in [
+        [str(repo / ".venv/bin/python"), "-m", "ruff", "check", "source.py"],
+        [str(repo / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "--fix", "source.py"],
+        [str(repo / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "../outside.py"],
+        [str(repo / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "."],
+    ]:
+        assert not runner._is_safe_ruff(argv, repo)
+    linked = repo / "linked.py"
+    linked.symlink_to(repo / "source.py")
+    assert not runner._is_safe_ruff([str(repo / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "linked.py"], repo)
+
+
+def test_ruff_gate_baseline_blocks_before_sources_and_candidate_failure_rolls_back(tmp_path, monkeypatch):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    ruff = [str(repo / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "source.py", "check.py"]
+    mission = make_mission(runner, repo).model_copy(update={"ruff_check_argv": ruff})
+    calls = []
+    original = runner.run_allowed_command
+    def baseline_fail(argv, *args):
+        calls.append(argv)
+        if argv == ruff:
+            return runner.CommandResult(argv=argv, allowed=True, returncode=1, stdout="", stderr="ruff", timed_out=False)
+        return original(argv, *args)
+    monkeypatch.setattr(runner, "run_allowed_command", baseline_fail)
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs-baseline", investigation_source=lambda _m: pytest.fail("source called")).run()
+    assert result.reason == "RUFF_BASELINE_FAILED" and calls.count(ruff) == 1
+    monkeypatch.setattr(runner, "run_allowed_command", original)
+    before = (repo / "source.py").read_text()
+    seen = []
+    def candidate_fail(argv, *args):
+        seen.append(argv)
+        if argv == ruff and len([item for item in seen if item == ruff]) == 2:
+            return runner.CommandResult(argv=argv, allowed=True, returncode=1, stdout="", stderr="ruff", timed_out=False)
+        return original(argv, *args)
+    monkeypatch.setattr(runner, "run_allowed_command", candidate_fail)
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs-candidate", **sources(runner, successful_proposal(runner, repo))).run()
+    assert result.reason == "RUFF_CHECK_FAILED" and (repo / "source.py").read_text() == before
+
+
+def test_ruff_gate_orders_commands_binds_terminal_and_review(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    ruff = [str(repo / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "source.py", "check.py"]
+    mission = make_mission(runner, repo).model_copy(update={"ruff_check_argv": ruff})
+    seen = {}
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs", investigation_source=lambda _m: runner.Investigation(facts=[], category="test"), proposal_source=lambda _m, _i: successful_proposal(runner, repo), review_source=lambda _m, _i, _p, evidence: (seen.update(json.loads(evidence)) or runner.PostGreenReview(judgment="reviewed", concerns=[], evidence_requests=[]))).run()
+    assert result.status is runner.TerminalStatus.DONE
+    assert seen["baseline_ruff_command"]["returncode"] == 0
+    assert seen["candidate_ruff_command"]["returncode"] == 0
+    evidence = runner.GateEvidence(preflight_ok=True, live_proposal_valid=True, baseline_green=True, red_confirmed=True, production_applied=True, focused_green=True, full_green=True, scope_ok=True, revision_stable=True, rollback_performed=False, ruff_configured=True, ruff_argv=ruff, ruff_baseline=runner.CommandResult(argv=ruff, allowed=True, returncode=0, stdout="", stderr="", timed_out=False), ruff_candidate=runner.CommandResult(argv=ruff, allowed=True, returncode=0, stdout="", stderr="", timed_out=False))
+    assert runner.decide_terminal(evidence).status is runner.TerminalStatus.DONE
+    assert runner.decide_terminal(evidence.model_copy(update={"ruff_candidate": None})).reason == "RUFF_CHECK_FAILED"

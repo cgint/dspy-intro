@@ -23,6 +23,15 @@
     "tests",
     "-q"
   ],
+  "ruff_check_argv": [
+    "${REPO_VENV_PYTHON}",
+    "-m",
+    "ruff",
+    "check",
+    "--no-cache",
+    "src/workflow/schemas.py",
+    "tests/test_workflow.py"
+  ],
   "acceptance_test_path": "src/workflow/mini-swe-acceptance/G8-declared-risk-certainty.py",
   "acceptance_expected_red_text": "G8_UNVERIFIED_CANNOT_BE_FIVE",
   "expected_red_text": "G8_UNVERIFIED_CANNOT_BE_FIVE",

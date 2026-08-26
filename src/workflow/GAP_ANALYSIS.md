@@ -95,7 +95,39 @@ map above and from the historical read-only verdicts in §7.
   editable paths and baseline-proven at pytest rc1 with that marker; mission
   `src/workflow/mini-swe-missions/G8-declared-risk-certainty.json` is ready for a
   future protected run. This does not discover risks, establish risk completeness,
-  add fields, or close G8; no G8 implementation has run or been accepted.
+  add fields, or close G8. One no-retry protected run from HEAD
+  `c4599b25679acb910be2d7709905399a09c491d6` reached runner-mechanical `DONE` at
+  terminal sequence 55: trace
+  `/Users/cgint/dev/dspy-intro-mini-swe-runs/G8-declared-risk-certainty-1787770519-7026f8ad/trace.jsonl`
+  (`a99b8e1ff4d8df72314d9314aab5177bc86d9e8c35f44779b78b67d3dc4f05f9`);
+  fixture RED rc1 with `G8_UNVERIFIED_CANNOT_BE_FIVE`; focused GREEN rc0; ordinary
+  GREEN rc0 (51 tests); and protected oracle baseline rc1 then candidate rc0 (5
+  passed). Only `tests/test_workflow.py` and `src/workflow/schemas.py` changed;
+  post-review scope remained exact. The candidate bound oracle SHA
+  `0f498025e9f520b41c33c95a63501a205d41d516a8cc9979a4f22e30a0274d0f` to
+  scoped-diff SHA `1e2f58b8642b2f9a6f7eeb7881d1720f9f2490726bccfc11578ce5b096654ee6`.
+  Independent acceptance rejected this runner-DONE candidate: scoped Ruff reports
+  `E402 Module level import not at top of file` at `src/workflow/schemas.py:72`.
+  The two-path candidate was retained unchanged for one separate external learner
+  cycle. Learner manifest
+  `src/mini-swe-wf-learner/runs/G8-lint-rejected-learner-20260826/manifest.json`
+  (`74d7b58c82147d8d5b503c1ef4424405baeab84fea423e90e3b8215dff2a7c85`)
+  completed `DONE` against terminal sequence 55 and the bound scoped-diff SHA, with
+  zero candidates (`candidates.json` SHA
+  `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`). No
+  learning was promoted. The rejected candidate was then rolled back exactly from
+  `src/workflow/schemas.py` and `tests/test_workflow.py` to HEAD
+  `c4599b25679acb910be2d7709905399a09c491d6`; restored hashes are
+  `10f501a895ecbb2c3ba76a8b293eee06ddc4a29e68d531bb7a70197cd3cd615c` and
+  `8df7ebb694de16a428b37490f7ba86bab01312f4a55a5765d564587e1ba74515`.
+  Focused tests (6), ordinary tests (50), and Ruff are green; the protected oracle
+  correctly returned baseline rc1 with `G8_UNVERIFIED_CANNOT_BE_FIVE`. G8 remains
+  open and uncommitted. A generic mission-scoped Ruff gate is now TDD-verified:
+  only exact repo-venv `python -m ruff check --no-cache` argv with existing
+  repo-relative Python-file operands is accepted; baseline and candidate results bind
+  terminal authority, review evidence, scope checks, and rollback. The G8 mission is
+  rebound to lint `src/workflow/schemas.py` and `tests/test_workflow.py`; product
+  targets remain clean and no re-entry is authorized yet.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in

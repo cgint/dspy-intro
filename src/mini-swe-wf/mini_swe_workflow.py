@@ -79,6 +79,7 @@ class MissionSpec(BaseModel):
     timeout_seconds: float = Field(default=120.0, gt=0, le=600)
     acceptance_test_path: str | None = None
     acceptance_expected_red_text: str | None = None
+    ruff_check_argv: list[str] | None = None
 
     @model_validator(mode="after")
     def _acceptance_fields_are_paired(self) -> "MissionSpec":
@@ -202,6 +203,10 @@ class GateEvidence(BaseModel):
     acceptance_candidate: CommandResult | None = None
     acceptance_binding: AcceptanceBinding | None = None
     acceptance_final_binding: AcceptanceBinding | None = None
+    ruff_configured: bool = False
+    ruff_argv: list[str] | None = None
+    ruff_baseline: CommandResult | None = None
+    ruff_candidate: CommandResult | None = None
 
 
 class TerminalOutcome(BaseModel):
@@ -530,10 +535,29 @@ def _is_safe_pytest(argv: list[str], repo_root: Path) -> bool:
     return len(argv) >= 3 and argv[0] == expected_python and argv[1:3] == ["-m", "pytest"]
 
 
+def _is_safe_ruff(argv: list[str], repo_root: Path) -> bool:
+    root = repo_root.resolve()
+    expected = [str(root / ".venv" / "bin" / "python"), "-m", "ruff", "check", "--no-cache"]
+    if argv[:5] != expected or len(argv) == 5:
+        return False
+    for operand in argv[5:]:
+        candidate = Path(operand)
+        if candidate.is_absolute() or ".." in candidate.parts or candidate.suffix != ".py":
+            return False
+        raw = root / candidate
+        if raw.is_symlink() or not raw.is_file():
+            return False
+        try:
+            resolve_repo_file(root, operand)
+        except ScopeViolation:
+            return False
+    return True
+
+
 def run_allowed_command(argv: list[str], cwd: Path | str, allowed_argvs: list[list[str]], timeout_seconds: float, repo_root: Path | str) -> CommandResult:
     root = Path(repo_root).resolve()
-    if not any(argv == allowed for allowed in allowed_argvs) or not _is_safe_pytest(argv, root):
-        return CommandResult(argv=argv, allowed=False, returncode=None, stdout="", stderr="command not allow-listed safe pytest", timed_out=False)
+    if not any(argv == allowed for allowed in allowed_argvs) or not (_is_safe_pytest(argv, root) or _is_safe_ruff(argv, root)):
+        return CommandResult(argv=argv, allowed=False, returncode=None, stdout="", stderr="command not allow-listed safe pytest or ruff", timed_out=False)
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     try:
@@ -544,6 +568,11 @@ def run_allowed_command(argv: list[str], cwd: Path | str, allowed_argvs: list[li
 
 
 def decide_terminal(evidence: GateEvidence) -> TerminalOutcome:
+    if evidence.ruff_configured:
+        baseline = evidence.ruff_baseline
+        candidate = evidence.ruff_candidate
+        if baseline is None or candidate is None or baseline.argv != evidence.ruff_argv or candidate.argv != evidence.ruff_argv or not baseline.allowed or not candidate.allowed or baseline.timed_out or candidate.timed_out or baseline.returncode != 0 or candidate.returncode != 0:
+            return TerminalOutcome(status=TerminalStatus.BLOCKED, reason="RUFF_CHECK_FAILED")
     if evidence.acceptance_configured:
         baseline = evidence.acceptance_baseline
         candidate = evidence.acceptance_candidate
@@ -686,6 +715,8 @@ class MiniSWEWorkflow:
         for command in (self.mission.focused_test_argv, self.mission.full_test_argv):
             if not _is_safe_pytest(command, self.repo_root):
                 raise ScopeViolation("Mission commands must invoke pytest through repo .venv/bin/python")
+        if self.mission.ruff_check_argv is not None and not _is_safe_ruff(self.mission.ruff_check_argv, self.repo_root):
+            raise ScopeViolation("Ruff command must use the exact repo-local --no-cache check shape")
         acceptance_artifact = (
             validate_acceptance_artifact(self.repo_root, self.mission.allowed_paths, self.mission.acceptance_test_path)
             if self.mission.acceptance_test_path is not None
@@ -805,8 +836,11 @@ class MiniSWEWorkflow:
         acceptance_baseline: CommandResult | None = None
         acceptance_candidate: CommandResult | None = None
         acceptance_binding: AcceptanceBinding | None = None
+        ruff_baseline: CommandResult | None = None
+        ruff_candidate: CommandResult | None = None
+        ruff_argv = self.mission.ruff_check_argv
         acceptance_argv = acceptance_pytest_argv(self.repo_root, self.mission.acceptance_test_path) if self.mission.acceptance_test_path else None
-        allowed_commands = [self.mission.focused_test_argv, self.mission.full_test_argv] + ([acceptance_argv] if acceptance_argv else [])
+        allowed_commands = [self.mission.focused_test_argv, self.mission.full_test_argv] + ([ruff_argv] if ruff_argv else []) + ([acceptance_argv] if acceptance_argv else [])
         try:
             preflight = self._preflight()
             initial_revision = preflight["git_revision"]
@@ -826,6 +860,14 @@ class MiniSWEWorkflow:
             if not baseline_green:
                 self._stage_error(ledger, "baseline", RuntimeError("baseline verification failed"))
                 return self._blocked(ledger, run_directory, "BASELINE_FAILED", None)
+            if ruff_argv:
+                ruff_baseline = run_allowed_command(ruff_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
+                ledger.append("command", {"phase": "baseline_ruff", "result": ruff_baseline})
+                clean, changed = scope_gate("after_baseline_ruff")
+                if not clean:
+                    return self._blocked(ledger, run_directory, "OUT_OF_SCOPE_MUTATION", None, {"changed_paths": sorted(changed)})
+                if not ruff_baseline.allowed or ruff_baseline.timed_out or ruff_baseline.returncode != 0:
+                    return self._blocked(ledger, run_directory, "RUFF_BASELINE_FAILED", None, {"command": ruff_baseline.model_dump()})
             if acceptance_argv:
                 acceptance_baseline = run_allowed_command(acceptance_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
                 ledger.append("command", {"phase": "acceptance_baseline", "result": acceptance_baseline})
@@ -927,6 +969,14 @@ class MiniSWEWorkflow:
                 self._stage_error(ledger, "full_green", RuntimeError("full verification failed"))
                 return self._blocked(ledger, run_directory, "FULL_GREEN_FAILED" if clean else "OUT_OF_SCOPE_MUTATION", rollback_preimages(), {"command": full.model_dump()})
             self._stage_end(ledger, "full_green", {"returncode": full.returncode})
+            if ruff_argv:
+                ruff_candidate = run_allowed_command(ruff_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
+                ledger.append("command", {"phase": "candidate_ruff", "result": ruff_candidate})
+                clean, changed = scope_gate("after_candidate_ruff")
+                if not clean:
+                    return self._blocked(ledger, run_directory, "OUT_OF_SCOPE_MUTATION", rollback_preimages(), {"changed_paths": sorted(changed)})
+                if not ruff_candidate.allowed or ruff_candidate.timed_out or ruff_candidate.returncode != 0:
+                    return self._blocked(ledger, run_directory, "RUFF_CHECK_FAILED", rollback_preimages(), {"command": ruff_candidate.model_dump()})
             if acceptance_argv:
                 acceptance_candidate = run_allowed_command(acceptance_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
                 ledger.append("command", {"phase": "acceptance_candidate", "result": acceptance_candidate})
@@ -950,6 +1000,8 @@ class MiniSWEWorkflow:
                 "changed_paths": sorted(changed),
                 "focused_command": focused.model_dump(mode="json"),
                 "full_command": full.model_dump(mode="json"),
+                "baseline_ruff_command": ruff_baseline.model_dump(mode="json") if ruff_baseline else None,
+                "candidate_ruff_command": ruff_candidate.model_dump(mode="json") if ruff_candidate else None,
                 "acceptance_baseline_command": acceptance_baseline.model_dump(mode="json") if acceptance_baseline else None,
                 "acceptance_candidate_command": acceptance_candidate.model_dump(mode="json") if acceptance_candidate else None,
                 "acceptance_binding": acceptance_binding.model_dump(mode="json") if acceptance_binding else None,
@@ -979,7 +1031,7 @@ class MiniSWEWorkflow:
             )
             if acceptance_argv and acceptance_final_binding != acceptance_binding:
                 return self._blocked(ledger, run_directory, "ACCEPTANCE_STALE", rollback_preimages())
-            outcome = decide_terminal(GateEvidence(preflight_ok=True, live_proposal_valid=True, baseline_green=True, red_confirmed=True, production_applied=bool(production_paths), focused_green=True, full_green=True, scope_ok=clean, revision_stable=_git_revision(self.repo_root) == initial_revision, rollback_performed=False, acceptance_configured=acceptance_argv is not None, acceptance_baseline=acceptance_baseline, acceptance_candidate=acceptance_candidate, acceptance_binding=acceptance_binding, acceptance_final_binding=acceptance_final_binding))
+            outcome = decide_terminal(GateEvidence(preflight_ok=True, live_proposal_valid=True, baseline_green=True, red_confirmed=True, production_applied=bool(production_paths), focused_green=True, full_green=True, scope_ok=clean, revision_stable=_git_revision(self.repo_root) == initial_revision, rollback_performed=False, ruff_configured=ruff_argv is not None, ruff_argv=ruff_argv, ruff_baseline=ruff_baseline, ruff_candidate=ruff_candidate, acceptance_configured=acceptance_argv is not None, acceptance_baseline=acceptance_baseline, acceptance_candidate=acceptance_candidate, acceptance_binding=acceptance_binding, acceptance_final_binding=acceptance_final_binding))
             if outcome.status is TerminalStatus.BLOCKED:
                 return self._blocked(ledger, run_directory, outcome.reason or "TERMINAL_GATE_FAILED", rollback_preimages())
             ledger.append("terminal", {"state": WorkflowState.DONE, "changed_paths": sorted(changed), "review_concerns": review.concerns})
@@ -1002,8 +1054,9 @@ def load_mission_file(path: Path | str, repo_root: Path | str, model_name: str, 
     mission_path = Path(path).resolve(strict=True)
     raw = json.loads(mission_path.read_text(encoding="utf-8"))
     root = Path(repo_root).resolve()
-    for command_key in ("focused_test_argv", "full_test_argv"):
-        raw[command_key] = [str(root / ".venv" / "bin" / "python") if item == "${REPO_VENV_PYTHON}" else item for item in raw[command_key]]
+    for command_key in ("focused_test_argv", "full_test_argv", "ruff_check_argv"):
+        if raw.get(command_key) is not None:
+            raw[command_key] = [str(root / ".venv" / "bin" / "python") if item == "${REPO_VENV_PYTHON}" else item for item in raw[command_key]]
     spec = MissionSpec.model_validate(raw)
     return Mission(**spec.model_dump(), repo_root=str(root), model_name=model_name, reviewed_learning=reviewed_learning or [], mission_provenance=str(mission_path))
 
