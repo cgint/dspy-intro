@@ -35,7 +35,11 @@ def test_schema_instantiation_and_validation():
             event_subscribers=["CampaignSubscriber"],
             leaf_mutations=["UPDATE campaigns SET status='PAUSED'"]
         ),
-        git_intent_summary="Added atomic pause flag",
+        git_archeology={
+            "relevant_commits": ["abc1234"],
+            "author_intent_summary": "Added atomic pause flag",
+            "intent_vs_code_gap": "None"
+        },
         code_citations=["CampaignController.java:42"],
         baseline_summary="Campaign is paused synchronously in DB",
         diagram_d2="controller -> service -> db"
@@ -131,7 +135,11 @@ def test_workflow_forward_with_mocked_stages(monkeypatch):
     mock_baseline = PrimaryBaseline(
         inquiry_id="INQ-TEST",
         call_tree=CallTree(entry_point="API", leaf_mutations=["DELETE"]),
-        git_intent_summary="Initial commit",
+        git_archeology={
+            "relevant_commits": ["def5678"],
+            "author_intent_summary": "Initial commit",
+            "intent_vs_code_gap": "None"
+        },
         code_citations=["test.py:1"],
         baseline_summary="Delete triggers DB removal",
         diagram_d2="api -> db"
