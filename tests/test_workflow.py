@@ -70,6 +70,17 @@ def test_schema_instantiation_and_validation():
     )
     assert verdict.certainty_score == 4
 
+    import pytest
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="G8_UNVERIFIED_CANNOT_BE_FIVE"):
+        ReconciledVerdict(
+            inquiry_id="INQ-101",
+            certainty_score=5,
+            residual_risks=["Some unverified risk"],
+            plain_language_verdict="Uncertain",
+            actionable_decision_matrix="None"
+        )
+
 
 def test_tool_read_code_slice(tmp_path):
     """Verify read_code_slice correctly reads line ranges and handles missing files."""

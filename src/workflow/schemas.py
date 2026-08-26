@@ -4,7 +4,7 @@ These schemas map directly to the OpenProse contract 'Maintains' definitions.
 """
 
 from typing import List, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class InquiryRecord(BaseModel):
@@ -79,3 +79,9 @@ class ReconciledVerdict(BaseModel):
     plain_language_verdict: str = Field(..., description="Clear executive answer for stakeholders")
     actionable_decision_matrix: str = Field(..., description="Immediate concrete actions or remediation steps")
     reconciled_diagram_d2: str = Field(default="", description="Final reconciled D2 diagram")
+
+    @model_validator(mode="after")
+    def validate_certainty_and_risks(self) -> "ReconciledVerdict":
+        if self.certainty_score == 5 and self.residual_risks:
+            raise ValueError("G8_UNVERIFIED_CANNOT_BE_FIVE: certainty_score 5 is invalid when residual_risks are present")
+        return self
