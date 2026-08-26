@@ -619,9 +619,13 @@ def _snapshot_workspace(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
         relative = path.relative_to(root)
-        if any(part in _IGNORED_SNAPSHOT_PARTS for part in relative.parts) or path.is_symlink() or not path.is_file():
+        if any(part in _IGNORED_SNAPSHOT_PARTS for part in relative.parts):
             continue
-        result[relative.as_posix()] = sha256_bytes(path.read_bytes())
+        stat = path.lstat()
+        if path.is_symlink():
+            result[relative.as_posix()] = f"symlink:{stat.st_mode:o}:{os.readlink(path)}"
+        elif path.is_file():
+            result[relative.as_posix()] = f"file:{stat.st_mode:o}:{sha256_bytes(path.read_bytes())}"
     return result
 
 
@@ -833,6 +837,16 @@ class MiniSWEWorkflow:
             ledger.append("scope_check", {"phase": phase, "changed_paths": sorted(changed), "scope_ok": clean})
             return clean, changed
 
+        def validation_command(phase: str, argv: list[str]) -> tuple[CommandResult, set[str]]:
+            before = _snapshot_workspace(self.repo_root)
+            result = run_allowed_command(argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
+            after = _snapshot_workspace(self.repo_root)
+            changed = _changed_paths(before, after)
+            ledger.append("command", {"phase": phase, "result": result})
+            if changed:
+                ledger.append("command_mutation", {"phase": phase, "argv": argv, "changed_paths": sorted(changed), "returncode": result.returncode, "timed_out": result.timed_out})
+            return result, changed
+
         acceptance_baseline: CommandResult | None = None
         acceptance_candidate: CommandResult | None = None
         acceptance_binding: AcceptanceBinding | None = None
@@ -850,27 +864,31 @@ class MiniSWEWorkflow:
             preimages = {path: (_validate_allowed_file(self.repo_root, self.mission.allowed_paths, path).read_bytes(), _validate_allowed_file(self.repo_root, self.mission.allowed_paths, path).stat().st_mode) for path in self.mission.allowed_paths}
 
             self._stage_start(ledger, "baseline")
-            baseline_focused = run_allowed_command(self.mission.focused_test_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
-            ledger.append("command", {"phase": "baseline_focused", "result": baseline_focused})
+            baseline_focused, mutation = validation_command("baseline_focused", self.mission.focused_test_argv)
+            if mutation:
+                return self._blocked(ledger, run_directory, "COMMAND_MUTATION", None, {"phase": "baseline_focused", "changed_paths": sorted(mutation), "command": baseline_focused.model_dump()})
             clean, changed = scope_gate("after_baseline_focused")
-            baseline_full = run_allowed_command(self.mission.full_test_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
-            ledger.append("command", {"phase": "baseline_full", "result": baseline_full})
+            baseline_full, mutation = validation_command("baseline_full", self.mission.full_test_argv)
+            if mutation:
+                return self._blocked(ledger, run_directory, "COMMAND_MUTATION", None, {"phase": "baseline_full", "changed_paths": sorted(mutation), "command": baseline_full.model_dump()})
             clean = clean and scope_gate("after_baseline_full")[0]
             baseline_green = clean and all(result.allowed and not result.timed_out and result.returncode == 0 for result in (baseline_focused, baseline_full))
             if not baseline_green:
                 self._stage_error(ledger, "baseline", RuntimeError("baseline verification failed"))
                 return self._blocked(ledger, run_directory, "BASELINE_FAILED", None)
             if ruff_argv:
-                ruff_baseline = run_allowed_command(ruff_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
-                ledger.append("command", {"phase": "baseline_ruff", "result": ruff_baseline})
+                ruff_baseline, mutation = validation_command("baseline_ruff", ruff_argv)
+                if mutation:
+                    return self._blocked(ledger, run_directory, "COMMAND_MUTATION", None, {"phase": "baseline_ruff", "changed_paths": sorted(mutation), "command": ruff_baseline.model_dump()})
                 clean, changed = scope_gate("after_baseline_ruff")
                 if not clean:
                     return self._blocked(ledger, run_directory, "OUT_OF_SCOPE_MUTATION", None, {"changed_paths": sorted(changed)})
                 if not ruff_baseline.allowed or ruff_baseline.timed_out or ruff_baseline.returncode != 0:
                     return self._blocked(ledger, run_directory, "RUFF_BASELINE_FAILED", None, {"command": ruff_baseline.model_dump()})
             if acceptance_argv:
-                acceptance_baseline = run_allowed_command(acceptance_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
-                ledger.append("command", {"phase": "acceptance_baseline", "result": acceptance_baseline})
+                acceptance_baseline, mutation = validation_command("acceptance_baseline", acceptance_argv)
+                if mutation:
+                    return self._blocked(ledger, run_directory, "COMMAND_MUTATION", None, {"phase": "acceptance_baseline", "changed_paths": sorted(mutation), "command": acceptance_baseline.model_dump()})
                 clean, changed = scope_gate("after_acceptance_baseline")
                 output = f"{acceptance_baseline.stdout}\n{acceptance_baseline.stderr}"
                 if not clean:
@@ -926,8 +944,9 @@ class MiniSWEWorkflow:
             self._stage_end(ledger, "test_edit", {"paths": sorted(applied_paths)})
 
             self._stage_start(ledger, "red")
-            red = run_allowed_command(self.mission.focused_test_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
-            ledger.append("command", {"phase": "focused_red", "result": red})
+            red, mutation = validation_command("focused_red", self.mission.focused_test_argv)
+            if mutation:
+                return self._blocked(ledger, run_directory, "COMMAND_MUTATION", rollback_preimages(), {"phase": "focused_red", "changed_paths": sorted(mutation), "command": red.model_dump()})
             clean, changed = scope_gate("after_red")
             red_confirmed = clean and red.allowed and not red.timed_out and red.returncode == self.mission.expected_red_returncode and self.mission.expected_red_text in f"{red.stdout}\n{red.stderr}"
             if not red_confirmed:
@@ -953,8 +972,9 @@ class MiniSWEWorkflow:
             self._stage_end(ledger, "production_edit", {"paths": production_paths})
 
             self._stage_start(ledger, "focused_green")
-            focused = run_allowed_command(self.mission.focused_test_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
-            ledger.append("command", {"phase": "focused_green", "result": focused})
+            focused, mutation = validation_command("focused_green", self.mission.focused_test_argv)
+            if mutation:
+                return self._blocked(ledger, run_directory, "COMMAND_MUTATION", rollback_preimages(), {"phase": "focused_green", "changed_paths": sorted(mutation), "command": focused.model_dump()})
             clean, changed = scope_gate("after_focused_green")
             if not (clean and focused.allowed and not focused.timed_out and focused.returncode == 0):
                 self._stage_error(ledger, "focused_green", RuntimeError("focused verification failed"))
@@ -962,24 +982,27 @@ class MiniSWEWorkflow:
             self._stage_end(ledger, "focused_green", {"returncode": focused.returncode})
 
             self._stage_start(ledger, "full_green")
-            full = run_allowed_command(self.mission.full_test_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
-            ledger.append("command", {"phase": "full_green", "result": full})
+            full, mutation = validation_command("full_green", self.mission.full_test_argv)
+            if mutation:
+                return self._blocked(ledger, run_directory, "COMMAND_MUTATION", rollback_preimages(), {"phase": "full_green", "changed_paths": sorted(mutation), "command": full.model_dump()})
             clean, changed = scope_gate("after_full_green")
             if not (clean and full.allowed and not full.timed_out and full.returncode == 0):
                 self._stage_error(ledger, "full_green", RuntimeError("full verification failed"))
                 return self._blocked(ledger, run_directory, "FULL_GREEN_FAILED" if clean else "OUT_OF_SCOPE_MUTATION", rollback_preimages(), {"command": full.model_dump()})
             self._stage_end(ledger, "full_green", {"returncode": full.returncode})
             if ruff_argv:
-                ruff_candidate = run_allowed_command(ruff_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
-                ledger.append("command", {"phase": "candidate_ruff", "result": ruff_candidate})
+                ruff_candidate, mutation = validation_command("candidate_ruff", ruff_argv)
+                if mutation:
+                    return self._blocked(ledger, run_directory, "COMMAND_MUTATION", rollback_preimages(), {"phase": "candidate_ruff", "changed_paths": sorted(mutation), "command": ruff_candidate.model_dump()})
                 clean, changed = scope_gate("after_candidate_ruff")
                 if not clean:
                     return self._blocked(ledger, run_directory, "OUT_OF_SCOPE_MUTATION", rollback_preimages(), {"changed_paths": sorted(changed)})
                 if not ruff_candidate.allowed or ruff_candidate.timed_out or ruff_candidate.returncode != 0:
                     return self._blocked(ledger, run_directory, "RUFF_CHECK_FAILED", rollback_preimages(), {"command": ruff_candidate.model_dump()})
             if acceptance_argv:
-                acceptance_candidate = run_allowed_command(acceptance_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
-                ledger.append("command", {"phase": "acceptance_candidate", "result": acceptance_candidate})
+                acceptance_candidate, mutation = validation_command("acceptance_candidate", acceptance_argv)
+                if mutation:
+                    return self._blocked(ledger, run_directory, "COMMAND_MUTATION", rollback_preimages(), {"phase": "acceptance_candidate", "changed_paths": sorted(mutation), "command": acceptance_candidate.model_dump()})
                 clean, changed = scope_gate("after_acceptance_candidate")
                 if not clean:
                     return self._blocked(ledger, run_directory, "OUT_OF_SCOPE_MUTATION", rollback_preimages(), {"changed_paths": sorted(changed)})

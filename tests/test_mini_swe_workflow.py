@@ -619,7 +619,7 @@ def test_runner_blocks_out_of_scope_command_mutation(tmp_path):
         **sources(runner, proposal),
     ).run()
     assert result.status == runner.TerminalStatus.BLOCKED
-    assert result.reason == "OUT_OF_SCOPE_MUTATION"
+    assert result.reason == "COMMAND_MUTATION"
 
 
 def acceptance_mission(runner, repo: Path, source: str | None = None):
@@ -683,7 +683,7 @@ def test_held_out_candidate_failure_rolls_back_and_terminal_requires_evidence(tm
 
 def test_held_out_baseline_rc2_timeout_and_mutation_block_before_sources(tmp_path, monkeypatch):
     runner = runner_module()
-    for source, reason in [("def test_held_out(:\n", "ACCEPTANCE_BASELINE_INVALID"), ("from pathlib import Path\n\ndef test_held_out():\n    Path('outside.txt').write_text('x')\n    assert False, 'HELD_OUT_MISSING'\n", "OUT_OF_SCOPE_MUTATION")]:
+    for source, reason in [("def test_held_out(:\n", "ACCEPTANCE_BASELINE_INVALID"), ("from pathlib import Path\n\ndef test_held_out():\n    Path('outside.txt').write_text('x')\n    assert False, 'HELD_OUT_MISSING'\n", "COMMAND_MUTATION")]:
         case_root = tmp_path / reason
         case_root.mkdir()
         repo = make_repo(case_root)
@@ -712,7 +712,7 @@ def test_held_out_candidate_mutation_and_review_staleness_roll_back(tmp_path):
     mission = acceptance_mission(runner, repo, "from pathlib import Path\n\ndef test_held_out():\n    if 'event_subscribers' in Path('source.py').read_text():\n        Path('outside.txt').write_text('x')\n        return\n    assert False, 'HELD_OUT_MISSING'\n")
     before = (repo / "source.py").read_text()
     result = runner.MiniSWEWorkflow(mission, tmp_path / "runs-candidate", **sources(runner, successful_proposal(runner, repo))).run()
-    assert result.reason == "OUT_OF_SCOPE_MUTATION"
+    assert result.reason == "COMMAND_MUTATION"
     assert (repo / "source.py").read_text() == before
     stale_root = tmp_path / "stale"
     stale_root.mkdir()
@@ -838,3 +838,81 @@ def test_ruff_gate_orders_commands_binds_terminal_and_review(tmp_path):
     evidence = runner.GateEvidence(preflight_ok=True, live_proposal_valid=True, baseline_green=True, red_confirmed=True, production_applied=True, focused_green=True, full_green=True, scope_ok=True, revision_stable=True, rollback_performed=False, ruff_configured=True, ruff_argv=ruff, ruff_baseline=runner.CommandResult(argv=ruff, allowed=True, returncode=0, stdout="", stderr="", timed_out=False), ruff_candidate=runner.CommandResult(argv=ruff, allowed=True, returncode=0, stdout="", stderr="", timed_out=False))
     assert runner.decide_terminal(evidence).status is runner.TerminalStatus.DONE
     assert runner.decide_terminal(evidence.model_copy(update={"ruff_candidate": None})).reason == "RUFF_CHECK_FAILED"
+
+
+def test_ruff_audit_loader_expands_placeholder_and_omission_is_compatible(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    raw = runner.MissionSpec.model_validate(make_mission(runner, repo).model_dump(exclude={"repo_root", "model_name", "reviewed_learning", "mission_provenance"})).model_dump()
+    raw["ruff_check_argv"] = ["${REPO_VENV_PYTHON}", "-m", "ruff", "check", "--no-cache", "source.py"]
+    path = tmp_path / "with-ruff.json"
+    path.write_text(json.dumps(raw))
+    loaded = runner.load_mission_file(path, repo, "test")
+    assert loaded.ruff_check_argv[0] == str(repo / ".venv/bin/python")
+    raw.pop("ruff_check_argv")
+    path.write_text(json.dumps(raw))
+    assert runner.load_mission_file(path, repo, "test").ruff_check_argv is None
+
+
+def test_ruff_audit_rejects_all_unsafe_shapes_and_non_allowlisted_command(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    safe = [str(repo / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "source.py"]
+    linked = repo / "linked.py"
+    linked.symlink_to(repo / "source.py")
+    outside = tmp_path / "outside.py"
+    outside.write_text("x = 1\n")
+    bad = [
+        [str(repo / "python"), *safe[1:]],
+        [safe[0], "-m", "not_ruff", *safe[3:]],
+        [safe[0], "-m", "ruff", "check", "source.py"],
+        [*safe[:5], "--fix", "source.py"], [*safe[:5], "--output-file", "x", "source.py"],
+        [*safe[:5], "--config", "x", "source.py"], [*safe[:5], str(outside)],
+        [*safe[:5], "../outside.py"], [*safe[:5], "."], [*safe[:5], "linked.py"],
+    ]
+    assert all(not runner._is_safe_ruff(argv, repo) for argv in bad)
+    result = runner.run_allowed_command(safe, repo, [], 1, repo)
+    assert not result.allowed
+
+
+@pytest.mark.parametrize("phase", ["baseline_timeout", "baseline_mutation", "candidate_timeout", "candidate_mutation"])
+def test_ruff_audit_timeouts_and_mutations_block_with_required_rollback(tmp_path, monkeypatch, phase):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    ruff = [str(repo / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "source.py", "check.py"]
+    mission = make_mission(runner, repo).model_copy(update={"ruff_check_argv": ruff})
+    original = runner.run_allowed_command
+    calls = 0
+    source_before, check_before = (repo / "source.py").read_text(), (repo / "check.py").read_text()
+    def controlled(argv, *args):
+        nonlocal calls
+        if argv == ruff:
+            calls += 1
+            if phase.startswith("baseline") and calls == 1 or phase.startswith("candidate") and calls == 2:
+                if phase.endswith("timeout"):
+                    return runner.CommandResult(argv=argv, allowed=True, returncode=None, stdout="", stderr="", timed_out=True)
+                (repo / "source.py").write_text("mutated = True\n")
+                return runner.CommandResult(argv=argv, allowed=True, returncode=0, stdout="", stderr="", timed_out=False)
+        return original(argv, *args)
+    monkeypatch.setattr(runner, "run_allowed_command", controlled)
+    result = runner.MiniSWEWorkflow(mission, tmp_path / phase, investigation_source=lambda _m: pytest.fail("source called") if phase.startswith("baseline") else runner.Investigation(facts=[], category="test"), **({} if phase.startswith("baseline") else {"proposal_source": lambda _m, _i: successful_proposal(runner, repo), "review_source": lambda *_args: runner.PostGreenReview(judgment="ok", concerns=[], evidence_requests=[])})).run()
+    if phase.startswith("baseline"):
+        assert result.reason == ("RUFF_BASELINE_FAILED" if phase.endswith("timeout") else "COMMAND_MUTATION")
+    else:
+        assert result.reason == ("RUFF_CHECK_FAILED" if phase.endswith("timeout") else "COMMAND_MUTATION")
+        assert (repo / "source.py").read_text() == source_before and (repo / "check.py").read_text() == check_before
+
+
+def test_ruff_audit_terminal_rejects_all_bad_evidence(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    ruff = [str(repo / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "source.py"]
+    good = runner.CommandResult(argv=ruff, allowed=True, returncode=0, stdout="", stderr="", timed_out=False)
+    base = runner.GateEvidence(preflight_ok=True, live_proposal_valid=True, baseline_green=True, red_confirmed=True, production_applied=True, focused_green=True, full_green=True, scope_ok=True, revision_stable=True, rollback_performed=False, ruff_configured=True, ruff_argv=ruff, ruff_baseline=good, ruff_candidate=good)
+    assert runner.decide_terminal(base).status is runner.TerminalStatus.DONE
+    variants = [
+        {"ruff_candidate": None}, {"ruff_candidate": good.model_copy(update={"argv": [*ruff, "check.py"]})},
+        {"ruff_candidate": good.model_copy(update={"allowed": False})}, {"ruff_candidate": good.model_copy(update={"timed_out": True})},
+        {"ruff_candidate": good.model_copy(update={"returncode": 1})},
+    ]
+    assert all(runner.decide_terminal(base.model_copy(update=update)).reason == "RUFF_CHECK_FAILED" for update in variants)

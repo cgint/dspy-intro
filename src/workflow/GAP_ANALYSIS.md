@@ -122,12 +122,16 @@ map above and from the historical read-only verdicts in §7.
   `8df7ebb694de16a428b37490f7ba86bab01312f4a55a5765d564587e1ba74515`.
   Focused tests (6), ordinary tests (50), and Ruff are green; the protected oracle
   correctly returned baseline rc1 with `G8_UNVERIFIED_CANNOT_BE_FIVE`. G8 remains
-  open and uncommitted. A generic mission-scoped Ruff gate is now TDD-verified:
-  only exact repo-venv `python -m ruff check --no-cache` argv with existing
-  repo-relative Python-file operands is accepted; baseline and candidate results bind
-  terminal authority, review evidence, scope checks, and rollback. The G8 mission is
-  rebound to lint `src/workflow/schemas.py` and `tests/test_workflow.py`; product
-  targets remain clean and no re-entry is authorized yet.
+  open and uncommitted. Commit `3cc7b5f` bound a generic mission-scoped Ruff gate
+  to G8, but its provider-free audit exposed that cumulative scope checks allowed
+  validation commands to mutate allow-listed paths. The follow-up repair routes every
+  baseline/RED/GREEN pytest, Ruff, and protected-acceptance command through an
+  immutable-command wrapper: it snapshots before/after, records `command` then
+  `command_mutation`, and blocks `COMMAND_MUTATION` regardless of command rc/timeout.
+  The repaired provider-free audit is green (7 cases): loader placeholder/backcompat,
+  strict shape/allow-list, baseline/candidate timeout, baseline/candidate mutation and
+  targeted candidate rollback, and terminal evidence. G8 product targets remain clean,
+  open, and unauthorized for re-entry.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in
