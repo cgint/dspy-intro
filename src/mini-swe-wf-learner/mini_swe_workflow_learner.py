@@ -57,6 +57,8 @@ class LearnerRequest(BaseModel):
 class PreflightEvidence(BaseModel):
     event_numbers: list[int]
     terminal_sequence: int
+    terminal_state: Literal["DONE", "BLOCKED"]
+    terminal_reason: str | None
     sanitized_events: list[dict[str, Any]]
 
 
@@ -100,10 +102,15 @@ def preflight(request: LearnerRequest) -> PreflightEvidence:
     if not sequences or sequences != sorted(sequences) or len(set(sequences)) != len(sequences):
         raise PreflightError("trace sequences must be monotonic and unique")
     terminal = events[-1]
-    if terminal.get("event") != "terminal" or terminal.get("payload", {}).get("state") != "DONE":
-        raise PreflightError("trace final terminal is not DONE")
+    payload = terminal.get("payload", {})
+    terminal_state = payload.get("state") if isinstance(payload, dict) else None
+    if terminal.get("event") != "terminal" or terminal_state not in {"DONE", "BLOCKED"}:
+        raise PreflightError("trace final terminal is not DONE or BLOCKED")
+    terminal_reason = payload.get("reason")
+    if terminal_state == "BLOCKED" and (not isinstance(terminal_reason, str) or not terminal_reason.strip()):
+        raise PreflightError("BLOCKED terminal requires a non-empty reason")
     sanitized = [{"sequence": e["sequence"], "event": e.get("event"), "payload": e.get("payload", {})} for e in events]
-    return PreflightEvidence(event_numbers=sequences, terminal_sequence=sequences[-1], sanitized_events=sanitized)
+    return PreflightEvidence(event_numbers=sequences, terminal_sequence=sequences[-1], terminal_state=terminal_state, terminal_reason=terminal_reason, sanitized_events=sanitized)
 
 
 def validate_candidates(raw: Any, event_numbers: set[int]) -> list[CandidateLearning]:
@@ -121,8 +128,10 @@ def validate_candidates(raw: Any, event_numbers: set[int]) -> list[CandidateLear
 
 class LearnFromFrozenEvidence(dspy.Signature):
     """Derive zero or more atomic candidate learnings only from supplied observable evidence.
-    Do not promote, certify, modify code, choose a next task, or claim hidden reasoning.
-    Each candidate must cite trace event sequence numbers and concern improving later #1 runs.
+    Compare each proposed runner change against the supplied runner source; omit changes already
+    implemented or redundant. Prioritize observable terminal-failure mechanisms, do not seed a
+    conclusion, and cite only supplied trace event sequence numbers. Do not promote, certify,
+    modify code, choose a next task, or claim hidden reasoning.
     """
 
     observable_evidence: str = dspy.InputField()
@@ -134,7 +143,7 @@ def _observable_evidence(request: LearnerRequest, evidence: PreflightEvidence) -
         "trace_events": evidence.sanitized_events,
         "mission": json.loads(request.mission_path.read_text(encoding="utf-8")),
         "runner": {"path": str(request.runner_path), "sha256": request.runner_sha256, "content": request.runner_path.read_text(encoding="utf-8")},
-        "g12_diff": {"sha256": request.diff_sha256, "content": request.diff_path.read_text(encoding="utf-8")},
+        "target_diff": {"sha256": request.diff_sha256, "content": request.diff_path.read_text(encoding="utf-8")},
     }, sort_keys=True)
 
 
@@ -158,7 +167,7 @@ def run(request: LearnerRequest, candidate_source: Callable[[str], Any] | None =
         if protected_before != {label: sha256_file(path) for label, path in (("trace", request.trace_path), ("mission", request.mission_path), ("runner", request.runner_path), ("diff", request.diff_path))}:
             raise PreflightError("protected input changed during learner execution")
         candidates_path.write_text(json.dumps([c.model_dump(mode="json") for c in candidates], indent=2) + "\n", encoding="utf-8")
-        manifest.update({"status": "DONE", "terminal_sequence": evidence.terminal_sequence, "candidate_count": len(candidates), "candidates_sha256": sha256_file(candidates_path)})
+        manifest.update({"status": "DONE", "terminal_sequence": evidence.terminal_sequence, "terminal_state": evidence.terminal_state, "terminal_reason": evidence.terminal_reason, "candidate_count": len(candidates), "candidates_sha256": sha256_file(candidates_path)})
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return LearnerResult("DONE", None, candidates_path, manifest_path)
     except Exception as error:
@@ -169,6 +178,26 @@ def run(request: LearnerRequest, candidate_source: Callable[[str], Any] | None =
         return LearnerResult("BLOCKED", repr(error), candidates_path, manifest_path)
 
 
+def load_allowed_paths(mission_path: Path, mission_sha256: str) -> list[str]:
+    _verify_file(mission_path, mission_sha256, "mission")
+    try:
+        mission = json.loads(mission_path.read_text(encoding="utf-8"))
+        allowed_paths = mission["allowed_paths"]
+    except (json.JSONDecodeError, KeyError, TypeError) as error:
+        raise PreflightError("mission lacks a valid allowed_paths list") from error
+    if not isinstance(allowed_paths, list) or not allowed_paths or any(not isinstance(path, str) or not path or Path(path).is_absolute() or ".." in Path(path).parts for path in allowed_paths):
+        raise PreflightError("mission lacks a valid allowed_paths list")
+    return allowed_paths
+
+
+def capture_target_diff(repo_root: Path, allowed_paths: list[str], diff_path: Path) -> None:
+    completed = subprocess.run(["git", "diff", "HEAD", "--no-ext-diff", "--", *allowed_paths], cwd=repo_root, capture_output=True, text=True, check=False)
+    if completed.returncode != 0:
+        raise PreflightError("could not capture target diff")
+    diff_path.parent.mkdir(parents=True, exist_ok=True)
+    diff_path.write_text(completed.stdout, encoding="utf-8")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Learn candidates from a frozen mini-SWE trace")
     parser.add_argument("--trace", required=True)
@@ -177,16 +206,17 @@ def main() -> int:
     parser.add_argument("--mission-sha256", required=True)
     parser.add_argument("--runner", required=True)
     parser.add_argument("--runner-sha256", required=True)
+    parser.add_argument("--repo-root", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--model", default="gemini/gemini-3.5-flash-lite")
     args = parser.parse_args()
     output = Path(args.output_dir)
-    diff_path = output / "g12.diff"
-    completed = subprocess.run(["git", "diff", "--", "src/workflow/schemas.py", "tests/test_workflow.py"], capture_output=True, text=True, check=False)
-    if completed.returncode != 0:
-        raise SystemExit("could not capture G12 diff")
-    output.mkdir(parents=True, exist_ok=True)
-    diff_path.write_text(completed.stdout, encoding="utf-8")
+    diff_path = output / "target.diff"
+    try:
+        allowed_paths = load_allowed_paths(Path(args.mission), args.mission_sha256)
+        capture_target_diff(Path(args.repo_root), allowed_paths, diff_path)
+    except PreflightError as error:
+        raise SystemExit(str(error)) from error
     request = LearnerRequest(trace_path=Path(args.trace), trace_sha256=args.trace_sha256, mission_path=Path(args.mission), mission_sha256=args.mission_sha256, runner_path=Path(args.runner), runner_sha256=args.runner_sha256, diff_path=diff_path, diff_sha256=sha256_file(diff_path), model=args.model, output_dir=output)
     result = run(request)
     print(json.dumps({"status": result.status, "reason": result.reason, "candidates_path": str(result.candidates_path), "manifest_path": str(result.manifest_path)}))

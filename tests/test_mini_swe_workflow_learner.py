@@ -44,21 +44,53 @@ def request(module, tmp_path):
     )
 
 
-def test_preflight_accepts_exact_terminal_trace_and_rejects_hash_malformed_or_nonterminal(tmp_path):
+def test_preflight_accepts_done_or_reasoned_blocked_and_rejects_invalid_terminal(tmp_path):
     learner = learner_module()
     req = request(learner, tmp_path)
     evidence = learner.preflight(req)
     assert evidence.event_numbers == [1, 2]
     assert evidence.terminal_sequence == 2
+    assert evidence.terminal_state == "DONE"
+    assert evidence.terminal_reason is None
+
+    req.trace_path.write_text(json.dumps({"sequence": 1, "event": "terminal", "payload": {"state": "BLOCKED", "reason": "EDIT_VALIDATION_FAILED"}}) + "\n")
+    blocked = learner.preflight(req.model_copy(update={"trace_sha256": learner.sha256_file(req.trace_path)}))
+    assert blocked.terminal_state == "BLOCKED"
+    assert blocked.terminal_reason == "EDIT_VALIDATION_FAILED"
 
     with pytest.raises(learner.PreflightError, match="hash"):
         learner.preflight(req.model_copy(update={"trace_sha256": "0" * 64}))
-    (req.trace_path).write_text('{"sequence": 1, "event": "terminal"}\n')
-    with pytest.raises(learner.PreflightError, match="DONE"):
+    req.trace_path.write_text('{"sequence": 1, "event": "terminal", "payload": {"state": "BLOCKED"}}\n')
+    with pytest.raises(learner.PreflightError, match="reason"):
+        learner.preflight(req.model_copy(update={"trace_sha256": learner.sha256_file(req.trace_path)}))
+    req.trace_path.write_text('{"sequence": 1, "event": "terminal"}\n')
+    with pytest.raises(learner.PreflightError, match="DONE or BLOCKED"):
         learner.preflight(req.model_copy(update={"trace_sha256": learner.sha256_file(req.trace_path)}))
     req.trace_path.write_text('{bad json}\n')
     with pytest.raises(learner.PreflightError, match="malformed"):
         learner.preflight(req.model_copy(update={"trace_sha256": learner.sha256_file(req.trace_path)}))
+
+
+def test_load_allowed_paths_and_capture_diff_use_verified_mission_and_repo_root(tmp_path):
+    learner = learner_module()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess = pytest.importorskip("subprocess")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    target = repo / "nested" / "target.py"
+    target.parent.mkdir()
+    target.write_text("before\n")
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-qm", "base"], check=True)
+    target.write_text("after\n")
+    mission = tmp_path / "mission.json"
+    mission.write_text(json.dumps({"mission_id": "generic", "allowed_paths": ["nested/target.py"]}))
+
+    assert learner.load_allowed_paths(mission, learner.sha256_file(mission)) == ["nested/target.py"]
+    diff = tmp_path / "target.diff"
+    learner.capture_target_diff(repo, ["nested/target.py"], diff)
+    assert "nested/target.py" in diff.read_text()
+    assert learner.sha256_file(diff) == learner.sha256_file(diff)
 
 
 def test_candidate_validation_requires_candidate_status_and_known_atomic_event_references():
@@ -87,6 +119,20 @@ def test_run_persists_provenance_and_never_changes_runner_or_target_inputs(tmp_p
     assert result.status == "DONE"
     manifest = json.loads(result.manifest_path.read_text())
     assert manifest["model"] == "gemini/gemini-3.5-flash-lite"
+    assert manifest["terminal_state"] == "DONE"
+    assert manifest["terminal_reason"] is None
     assert manifest["content_provenance"]["candidate_source"] == "injected"
     assert json.loads(result.candidates_path.read_text())[0]["status"] == "candidate"
     assert before == {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in before}
+
+
+def test_run_records_blocked_terminal_provenance(tmp_path):
+    learner = learner_module()
+    req = request(learner, tmp_path)
+    req.trace_path.write_text(json.dumps({"sequence": 1, "event": "terminal", "payload": {"state": "BLOCKED", "reason": "EDIT_VALIDATION_FAILED"}}) + "\n")
+    req = req.model_copy(update={"trace_sha256": learner.sha256_file(req.trace_path)})
+    result = learner.run(req, candidate_source=lambda _evidence: [])
+    manifest = json.loads(result.manifest_path.read_text())
+    assert result.status == "DONE"
+    assert manifest["terminal_state"] == "BLOCKED"
+    assert manifest["terminal_reason"] == "EDIT_VALIDATION_FAILED"
