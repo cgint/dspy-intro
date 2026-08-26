@@ -65,7 +65,7 @@ Every gap below should be read against *which* OpenProse it is measured against.
 | G5  | Git archaeology (structured)                                 | ✅`relevant_commits`, `author_intent_summary`, `intent_vs_code_gap`                   | ✅ Present/closed in commit `6c38160`                              | **Closed**           |
 | G6  | Operational telemetry                                        | ✅`production_telemetry` (3 fields) + `ui_origin_endpoint`                              | ❌ Absent from schema                                                | **Medium**           |
 | G7  | Rejection reasons                                            | ✅`rejected_proposals: [{id, rejection_reason}]`                                          | ⚠️ Flat list of IDs, no reasons                                    | **Medium**           |
-| G8  | No-5/5-if-declared-risk invariant                            | ✅ Hard rule in Stage 4 contract                                                            | ⚠️ Protected mission prepared; model enforcement not yet implemented | **Medium — in progress** |
+| G8  | No-5/5-if-declared-risk invariant                            | ✅ Hard rule in Stage 4 contract                                                            | ✅ `5829cf7` model enforcement and protected acceptance              | **Closed** |
 | G9  | Certainty threshold gate                                     | ✅`certainty_threshold` pattern param (default 4/5)                                       | ❌ No threshold concept                                              | **Medium**           |
 | G10 | First-class failure state                                    | ✅`kind: test` → `status: "rejected-unaddressed-proposals"`, `certainty_score: null` | ❌ No "inconclusive" terminal outcome                                | **Medium**           |
 | G11 | Deterministic diagram gate                                   | ✅`d2to.sh` exit-0, SVG embedded                                                          | ⚠️ Heuristic brace/regex check; real compile only if`d2` on PATH | **Medium**           |
@@ -180,8 +180,29 @@ map above and from the historical read-only verdicts in §7.
   have a matching existing or proposed import before use, with usage matching import
   form and module-top ordering, to prevent collection-time NameError/unbound
   decorators. This import-binding proposal guidance is committed/pending verification;
-  it is not a product-specific repair. G8 targets remain clean, open, and unauthorized
-  for re-entry.
+  it is not a product-specific repair. One no-retry import-bound marker-visible G8
+  re-entry from HEAD `3a13b94e6511b6c660c8a477036cfaa79b880810` reached
+  runner-mechanical `DONE` at sequence 59: trace
+  `/Users/cgint/dev/dspy-intro-mini-swe-runs/G8-declared-risk-certainty-1787773717-6c3bb792/trace.jsonl`
+  SHA `03fed080844bb744bbf01d2a76b06eaa08bcae2bd7f01d7f2426ec6a66287ccc`.
+  Baseline focused/full pytest and baseline/candidate Ruff were rc0; protected baseline
+  was rc1 with `G8_UNVERIFIED_CANNOT_BE_FIVE`, focused RED was rc1 with that marker,
+  focused/full GREEN and protected candidate were rc0, and no command mutation occurred.
+  The candidate binding is oracle SHA `0f498025e9f520b41c33c95a63501a205d41d516a8cc9979a4f22e30a0274d0f`
+  plus scoped-diff SHA `f1d276632f6bf2351cf4717a8c14536f1f3585a6bcb8cc32db8dd3799f791887`.
+  Only the two allow-listed targets changed and review had no concerns. The working-tree
+  candidate is independently accepted: focused 6, full 66, scoped Ruff, protected oracle
+  5, and construction/JSON semantics are green; its scope is only declared-risk
+  consistency (score 5 is invalid with nonempty `residual_risks`) and does not discover
+  risks or add fields. G8 is accepted, committed in `5829cf7`, and closed for declared-risk
+  consistency. One hash-pinned successful-trace
+  learner completed `DONE` against terminal sequence 59: manifest
+  `src/mini-swe-wf-learner/runs/G8-success-learner-20260826/manifest.json` SHA
+  `1f716708a5e95653e353db74f9fe08e10ac251237ecdbd0b36a76d6373ad55fc`, candidates SHA
+  `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`, and target diff
+  SHA `f1d276632f6bf2351cf4717a8c14536f1f3585a6bcb8cc32db8dd3799f791887` matching the
+  accepted binding. It emitted zero candidates, so no learner review or promotion is
+  pending. No retry, product repair, semantic expansion, or commit is authorized.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in
