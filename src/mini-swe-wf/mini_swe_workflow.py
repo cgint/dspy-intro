@@ -661,7 +661,7 @@ class InvestigateMissionSignature(dspy.Signature):
 
 
 class ProposeEditsSignature(dspy.Signature):
-    """Produce exact-hash test edits first and production edits second using only supplied evidence. Multiple same-file replacements are permitted only within one phase when non-overlapping, non-empty, and sharing the original full-file hash; cross-phase reuse is forbidden. When production introduces a new symbol, obtain assertion-level RED through an existing import/module/public API surface and do not import the not-yet-created production symbol in the test-only phase. An expected-error/rejection test must fail if the expected error is absent; silent try/except fallthrough is forbidden—use pytest.raises with a meaningful assertion/match or an explicit failure branch."""
+    """Produce exact-hash test edits first and production edits second using only supplied evidence. Multiple same-file replacements are permitted only within one phase when non-overlapping, non-empty, and sharing the original full-file hash; cross-phase reuse is forbidden. When production introduces a new symbol, obtain assertion-level RED through an existing import/module/public API surface and do not import the not-yet-created production symbol in the test-only phase. An expected-error/rejection test must fail if the expected error is absent and its failing path must include the exact mission Expected RED text: use pytest.raises(match=Expected RED text) or an explicit failure message containing it. Do not rely on an assertion after the context manager because it is unreachable when no exception occurs; silent try/except fallthrough is forbidden."""
 
     mission: str = dspy.InputField()
     investigation: Investigation = dspy.InputField()

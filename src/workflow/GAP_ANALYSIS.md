@@ -135,8 +135,31 @@ map above and from the historical read-only verdicts in §7.
   post-implementation audit is also green (4 cases): file/mode/create/delete/rename
   and symlink identity snapshots; rc1/timeout mutation precedence plus exact trace
   ordering; candidate owned-preimage restoration; and persistent reported unowned
-  out-of-scope output. G8 product targets remain clean, open, and unauthorized for
-  re-entry.
+  out-of-scope output. One no-retry protected G8 re-entry from HEAD
+  `c885c57b72486e6c4ebfb3d2c3278ff9c05137a5` ran under the frozen runner, mission,
+  and oracle hashes and terminally BLOCKED at sequence 35 with `RED_NOT_CONFIRMED`:
+  trace `/Users/cgint/dev/dspy-intro-mini-swe-runs/G8-declared-risk-certainty-1787772608-2db0ccee/trace.jsonl`
+  SHA `974224e1096866f59be575156cc459b3355cd455d1aa3fdc0014df0c35608763`.
+  Baseline focused/full pytest and baseline Ruff were rc0 with no command mutation;
+  protected baseline was rc1 with `G8_UNVERIFIED_CANNOT_BE_FIVE`. The live proposal
+  touched only the two allow-listed targets, but focused RED was rc1 for pytest's
+  `DID NOT RAISE` rather than the required marker; the runner rolled back
+  `tests/test_workflow.py`. Candidate Ruff/acceptance, review, and binding were not
+  reached. Target hashes were restored to the frozen preimages. One hash-pinned,
+  candidate-only external learner run completed `DONE` against that frozen block:
+  manifest `src/mini-swe-wf-learner/runs/G8-red-marker-blocked-learner-20260826/manifest.json`
+  SHA `88e1d706fa7ebf3934b8b847e9f38e47ab5289e0f02b2aa6b323bcc58a00b674`, candidates
+  SHA `50835ffa55a642e623678e08857204f5288e8a1b7b2e0570fc7f548b0742066a`, empty target
+  diff SHA `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+  It cites trace events 23/27/31 and emitted one review-pending candidate,
+  `learning-red-confirmed-test-only-phase-order`. It is rejected: its claim that RED
+  was correctly established conflicts with terminal `RED_NOT_CONFIRMED`; no learner
+  authority is promoted. Independently from frozen trace evidence, marker-visible
+  expected-error proposal guidance is promoted: the test-only failing path must emit
+  the exact Expected RED text, using `pytest.raises(match=...)` or an explicit fail
+  message, never an unreachable post-context assertion. Strict rc1+marker remains
+  unchanged. This guidance infrastructure is committed/pending verification; G8
+  product targets remain clean, open, and unauthorized for re-entry.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in

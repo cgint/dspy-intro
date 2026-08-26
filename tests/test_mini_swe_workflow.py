@@ -918,6 +918,15 @@ def test_ruff_audit_terminal_rejects_all_bad_evidence(tmp_path):
     assert all(runner.decide_terminal(base.model_copy(update=update)).reason == "RUFF_CHECK_FAILED" for update in variants)
 
 
+def test_proposal_guidance_requires_marker_visible_expected_error_failures():
+    runner = runner_module()
+    guidance = runner.ProposeEditsSignature.__doc__ or ""
+    assert "Expected RED text" in guidance
+    assert "pytest.raises" in guidance
+    assert "match=" in guidance
+    assert "unreachable" in guidance
+
+
 def test_command_mutation_audit_snapshot_detects_file_and_symlink_identity(tmp_path):
     runner = runner_module()
     repo = make_repo(tmp_path)
