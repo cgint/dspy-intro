@@ -158,8 +158,30 @@ map above and from the historical read-only verdicts in §7.
   expected-error proposal guidance is promoted: the test-only failing path must emit
   the exact Expected RED text, using `pytest.raises(match=...)` or an explicit fail
   message, never an unreachable post-context assertion. Strict rc1+marker remains
-  unchanged. This guidance infrastructure is committed/pending verification; G8
-  product targets remain clean, open, and unauthorized for re-entry.
+  unchanged. One no-retry marker-visible protected G8 re-entry from HEAD
+  `d011df80a20db20e1158283c3099207118127f52` terminally BLOCKED at sequence 45 with
+  `FOCUSED_GREEN_FAILED`: trace
+  `/Users/cgint/dev/dspy-intro-mini-swe-runs/G8-declared-risk-certainty-1787773171-95878415/trace.jsonl`
+  SHA `c7654a3254b23e5547e7fe7212dfa9b8223e627c9dd49876fc24732429e5baaa`.
+  Baseline focused/full pytest and baseline Ruff were rc0, protected baseline was rc1
+  with `G8_UNVERIFIED_CANNOT_BE_FIVE`, and focused RED was rc1 with that marker; no
+  command mutation occurred. The two allow-listed candidate edits passed scope but
+  focused GREEN exited rc2 at collection: `@pydantic.model_validator` referenced an
+  unimported `pydantic` name. Candidate Ruff, protected candidate acceptance, review,
+  and binding were not reached. The runner rolled back both targets to frozen hashes.
+  One hash-pinned candidate-only external learner run completed `DONE` against this
+  frozen `FOCUSED_GREEN_FAILED` block: manifest
+  `src/mini-swe-wf-learner/runs/G8-green-import-blocked-learner-20260826/manifest.json`
+  SHA `caa7394dd5c196a1b0f4633ec434f796a45b355a91405731170fc9c3293b2c2d`, candidates
+  SHA `9f70821d34db6d36783c04b5c0e7583cfc65b44fa28c8837609869a90a431902`, empty target
+  diff SHA `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+  It cites events 41/43/45 and emits `cand-1`; its diagnosis and citations are
+  accepted, but are generalized beyond Pydantic: every introduced identifier must
+  have a matching existing or proposed import before use, with usage matching import
+  form and module-top ordering, to prevent collection-time NameError/unbound
+  decorators. This import-binding proposal guidance is committed/pending verification;
+  it is not a product-specific repair. G8 targets remain clean, open, and unauthorized
+  for re-entry.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in

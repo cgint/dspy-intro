@@ -918,6 +918,16 @@ def test_ruff_audit_terminal_rejects_all_bad_evidence(tmp_path):
     assert all(runner.decide_terminal(base.model_copy(update=update)).reason == "RUFF_CHECK_FAILED" for update in variants)
 
 
+def test_proposal_guidance_requires_import_bindings_before_use():
+    runner = runner_module()
+    guidance = runner.ProposeEditsSignature.__doc__ or ""
+    assert "identifier" in guidance
+    assert "matching import" in guidance
+    assert "from package import name" in guidance
+    assert "package.name" in guidance
+    assert "collection-time NameError" in guidance
+
+
 def test_proposal_guidance_requires_marker_visible_expected_error_failures():
     runner = runner_module()
     guidance = runner.ProposeEditsSignature.__doc__ or ""
