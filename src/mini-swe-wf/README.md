@@ -17,9 +17,9 @@ The JSON mission declares its goal, existing allow-listed paths, focused/full re
 
 ## States and gates
 
-`PREFLIGHT → baseline GREEN → investigation → typed proposal → test edit → RED → production edit → focused GREEN → full GREEN → review → DONE`.
+`PREFLIGHT → baseline GREEN → held-out baseline RED → investigation → typed proposal → test edit → RED → production edit → focused GREEN → full GREEN → held-out candidate GREEN → review → DONE`.
 
-Preflight rejects dirty allow-listed files and unsafe commands. Edits require existing regular files, allow-list containment, an exact preimage hash, and exactly one old-text match. RED requires pytest exit code `1` and the mission marker. Scope snapshots, revision checks, and targeted rollback block unsafe outcomes. The post-GREEN review receives frozen investigation, proposal, scoped diff, changed paths, and command evidence, but its judgment is non-gating.
+Preflight rejects dirty allow-listed files and unsafe commands. An optional paired `acceptance_test_path` / `acceptance_expected_red_text` config derives a fixed repo-venv pytest command; its existing regular artifact must be outside editable paths and cannot be a symlink or hardlink alias. Its baseline must exit `1` with the marker, and its candidate must exit `0`; timeout, mutation, invalid baseline infrastructure, or candidate failure blocks (and candidate failure rolls back edits). Edits require existing regular files, allow-list containment, an exact preimage hash, and exactly one old-text match. RED requires pytest exit code `1` and the mission marker. Scope snapshots, revision checks, and targeted rollback block unsafe outcomes. After acceptance passes, the runner records the scoped candidate-diff and protected-artifact hashes, supplies that binding to review, then recomputes both immediately before terminal success; review-time drift blocks as stale acceptance and rolls back editable paths. The post-GREEN review receives frozen investigation, proposal, scoped diff, changed paths, ordinary command evidence, both acceptance results, and the binding, but its judgment is non-gating.
 
 ## Durable evidence and limits
 

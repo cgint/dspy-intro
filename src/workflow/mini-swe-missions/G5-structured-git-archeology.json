@@ -1,0 +1,32 @@
+{
+  "mission_id": "G5-structured-git-archeology",
+  "goal": "Replace PrimaryBaseline.git_intent_summary with a producer-defined nested git_archeology field containing required relevant_commits: list[str], author_intent_summary: str, and intent_vs_code_gap: str. First update both focused test fixtures and assertions to use the nested field so pytest produces genuine RED for git_intent_summary removal; then make the smallest schema/test edits needed for focused and full pytest GREEN.",
+  "allowed_paths": [
+    "src/workflow/schemas.py",
+    "tests/test_workflow.py"
+  ],
+  "focused_test_argv": [
+    "${REPO_VENV_PYTHON}",
+    "-m",
+    "pytest",
+    "-p",
+    "no:cacheprovider",
+    "tests/test_workflow.py",
+    "-q"
+  ],
+  "full_test_argv": [
+    "${REPO_VENV_PYTHON}",
+    "-m",
+    "pytest",
+    "-p",
+    "no:cacheprovider",
+    "tests",
+    "-q"
+  ],
+  "acceptance_test_path": "src/workflow/mini-swe-acceptance/G5-structured-git-archeology.py",
+  "acceptance_expected_red_text": "G5_HELD_OUT_GIT_ARCHEOLOGY",
+  "expected_red_text": "git_intent_summary",
+  "expected_red_returncode": 1,
+  "max_attempts": 1,
+  "timeout_seconds": 120
+}

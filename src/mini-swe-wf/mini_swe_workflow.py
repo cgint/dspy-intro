@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import time
@@ -22,7 +23,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 import dspy
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SRC_ROOT = Path(__file__).resolve().parents[1]
 if str(SRC_ROOT) not in sys.path:
@@ -39,6 +40,12 @@ class DirtyAllowedPaths(ValueError):
 
 class EditValidationError(ValueError):
     pass
+
+
+class ProposalValidationError(ValueError):
+    def __init__(self, path: str, reason: str):
+        self.path = path
+        super().__init__(f"{path}: {reason}")
 
 
 class TerminalStatus(str, Enum):
@@ -70,6 +77,14 @@ class MissionSpec(BaseModel):
     expected_red_returncode: int = 1
     max_attempts: int = Field(default=1, ge=1, le=3)
     timeout_seconds: float = Field(default=120.0, gt=0, le=600)
+    acceptance_test_path: str | None = None
+    acceptance_expected_red_text: str | None = None
+
+    @model_validator(mode="after")
+    def _acceptance_fields_are_paired(self) -> "MissionSpec":
+        if (self.acceptance_test_path is None) != (self.acceptance_expected_red_text is None):
+            raise ValueError("acceptance_test_path and acceptance_expected_red_text must be configured together")
+        return self
 
 
 class Mission(MissionSpec):
@@ -135,6 +150,23 @@ class AppliedEdit(BaseModel):
     after_sha256: str
 
 
+@dataclass(frozen=True)
+class GroupedEdit:
+    path: str
+    target: Path
+    before_bytes: bytes
+    after_bytes: bytes
+    mode: int
+    before_sha256: str
+    after_sha256: str
+
+
+@dataclass(frozen=True)
+class GroupedProposal:
+    test_groups: list[GroupedEdit]
+    production_groups: list[GroupedEdit]
+
+
 class CommandResult(BaseModel):
     argv: list[str]
     allowed: bool
@@ -142,6 +174,16 @@ class CommandResult(BaseModel):
     stdout: str
     stderr: str
     timed_out: bool
+
+
+class AcceptanceArtifact(BaseModel):
+    path: str
+    sha256: str
+
+
+class AcceptanceBinding(BaseModel):
+    scoped_diff_sha256: str
+    artifact_sha256: str
 
 
 class GateEvidence(BaseModel):
@@ -155,6 +197,11 @@ class GateEvidence(BaseModel):
     scope_ok: bool
     revision_stable: bool
     rollback_performed: bool
+    acceptance_configured: bool = False
+    acceptance_baseline: CommandResult | None = None
+    acceptance_candidate: CommandResult | None = None
+    acceptance_binding: AcceptanceBinding | None = None
+    acceptance_final_binding: AcceptanceBinding | None = None
 
 
 class TerminalOutcome(BaseModel):
@@ -230,6 +277,24 @@ def _validate_allowed_file(repo_root: Path | str, allowed_paths: list[str], rela
     if _is_env_path(relative_path) or not _is_allowed(relative_path, allowed_paths):
         raise ScopeViolation(f"Outside mission allow-list: {relative_path}")
     return resolve_repo_file(repo_root, relative_path)
+
+
+def validate_acceptance_artifact(repo_root: Path | str, allowed_paths: list[str], relative_path: str | None) -> AcceptanceArtifact:
+    if relative_path is None or _is_env_path(relative_path) or _is_allowed(relative_path, allowed_paths):
+        raise ScopeViolation("Acceptance artifact must be outside editable allow-list")
+    root = Path(repo_root).resolve(strict=True)
+    target = resolve_repo_file(root, relative_path)
+    identity = (target.stat().st_dev, target.stat().st_ino)
+    for candidate in root.rglob("*"):
+        if candidate == target or candidate.is_symlink() or not candidate.is_file():
+            continue
+        if (candidate.stat().st_dev, candidate.stat().st_ino) == identity:
+            raise ScopeViolation("Acceptance artifact aliases another repository path")
+    return AcceptanceArtifact(path=relative_path, sha256=sha256_bytes(target.read_bytes()))
+
+
+def acceptance_pytest_argv(repo_root: Path, relative_path: str) -> list[str]:
+    return [str(repo_root / ".venv" / "bin" / "python"), "-m", "pytest", "-p", "no:cacheprovider", relative_path, "-q"]
 
 
 def bounded_read(repo_root: Path | str, relative_path: str, max_bytes: int = 24_000) -> ReadResult:
@@ -334,6 +399,132 @@ def apply_exact_text_edit(repo_root: Path | str, allowed_paths: list[str], edit:
     return AppliedEdit(path=edit.path, before_sha256=before_hash, after_sha256=actual_hash)
 
 
+def _canonical_edit_path(path: str) -> str:
+    try:
+        canonical = _normal_relative_path(path).as_posix()
+    except ScopeViolation as error:
+        raise ProposalValidationError(path, str(error)) from error
+    if path != canonical:
+        raise ProposalValidationError(path, "path alias is forbidden")
+    return canonical
+
+
+def _normalize_phase(repo_root: Path | str, allowed_paths: list[str], edits: list[ExactTextEdit]) -> list[GroupedEdit]:
+    grouped: dict[str, list[ExactTextEdit]] = {}
+    targets: dict[str, Path] = {}
+    identities: dict[tuple[int, int], str] = {}
+    for edit in edits:
+        canonical = _canonical_edit_path(edit.path)
+        try:
+            target = _validate_allowed_file(repo_root, allowed_paths, canonical)
+        except ScopeViolation as error:
+            raise ProposalValidationError(edit.path, str(error)) from error
+        identity = (target.stat().st_dev, target.stat().st_ino)
+        if identity in identities and identities[identity] != canonical:
+            raise ProposalValidationError(edit.path, "path alias resolves to an existing proposal target")
+        identities[identity] = canonical
+        grouped.setdefault(canonical, []).append(edit)
+        targets[canonical] = target
+
+    normalized: list[GroupedEdit] = []
+    for path in sorted(grouped):
+        entries = grouped[path]
+        target = targets[path]
+        before = target.read_bytes()
+        try:
+            before.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise ProposalValidationError(path, "file is not UTF-8") from error
+        before_hash = sha256_bytes(before)
+        if any(entry.expected_sha256 != before_hash for entry in entries):
+            raise ProposalValidationError(path, "mixed or stale original full-file hash")
+        spans: list[tuple[int, int, bytes]] = []
+        seen_old: set[bytes] = set()
+        for entry in entries:
+            old_bytes = entry.old_text.encode("utf-8")
+            if not old_bytes:
+                raise ProposalValidationError(path, "empty old_text is forbidden")
+            if old_bytes in seen_old:
+                raise ProposalValidationError(path, "old_text must be unique within a grouped path")
+            seen_old.add(old_bytes)
+            if before.count(old_bytes) != 1:
+                raise ProposalValidationError(path, "old_text must occur exactly once in original bytes")
+            start = before.find(old_bytes)
+            spans.append((start, start + len(old_bytes), entry.new_text.encode("utf-8")))
+        spans.sort(key=lambda span: (span[0], span[1]))
+        for previous, current in zip(spans, spans[1:]):
+            if current[0] < previous[1]:
+                raise ProposalValidationError(path, "old_text spans overlap")
+        pieces: list[bytes] = []
+        cursor = 0
+        for start, end, replacement in spans:
+            pieces.extend((before[cursor:start], replacement))
+            cursor = end
+        pieces.append(before[cursor:])
+        after = b"".join(pieces)
+        normalized.append(GroupedEdit(path, target, before, after, stat.S_IMODE(target.stat().st_mode), before_hash, sha256_bytes(after)))
+    return normalized
+
+
+def normalize_change_proposal(repo_root: Path | str, allowed_paths: list[str], proposal: ChangeProposal) -> GroupedProposal:
+    """Validate and stage every final file before any grouped edit is written."""
+    test_groups = _normalize_phase(repo_root, allowed_paths, proposal.test_edits)
+    production_groups = _normalize_phase(repo_root, allowed_paths, proposal.production_edits)
+    test_identities = {(group.target.stat().st_dev, group.target.stat().st_ino): group.path for group in test_groups}
+    for group in production_groups:
+        identity = (group.target.stat().st_dev, group.target.stat().st_ino)
+        if identity in test_identities:
+            raise ProposalValidationError(group.path, "target cannot appear in both test and production phases")
+    return GroupedProposal(test_groups=test_groups, production_groups=production_groups)
+
+
+def apply_grouped_edit(group: GroupedEdit) -> AppliedEdit:
+    """Atomically write one fully staged file and prove its byte-level postimage."""
+    temporary = group.target.with_name(f".{group.target.name}.mini-swe-{uuid.uuid4().hex}.tmp")
+    try:
+        with temporary.open("xb") as handle:
+            handle.write(group.after_bytes)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, group.mode)
+        os.replace(temporary, group.target)
+        actual = group.target.read_bytes()
+        if sha256_bytes(actual) != group.after_sha256:
+            raise EditValidationError(f"Post-write byte hash mismatch: {group.path}")
+    except OSError as error:
+        raise EditValidationError(f"Atomic grouped write failed: {group.path}: {error}") from error
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+    return AppliedEdit(path=group.path, before_sha256=group.before_sha256, after_sha256=group.after_sha256)
+
+
+def _bounded_proposal_evidence(proposal: Any, max_edits: int = 32, max_text_chars: int = 512) -> dict[str, Any]:
+    if not isinstance(proposal, ChangeProposal):
+        return {"type": type(proposal).__name__}
+
+    def project(edits: list[ExactTextEdit]) -> dict[str, Any]:
+        return {
+            "count": len(edits),
+            "edits": [
+                {
+                    "path": edit.path,
+                    "expected_sha256": edit.expected_sha256,
+                    "old_text_sha256": sha256_text(edit.old_text),
+                    "new_text_sha256": sha256_text(edit.new_text),
+                    "old_text_chars": len(edit.old_text),
+                    "new_text_chars": len(edit.new_text),
+                    "old_text_preview": edit.old_text[:max_text_chars],
+                    "new_text_preview": edit.new_text[:max_text_chars],
+                }
+                for edit in edits[:max_edits]
+            ],
+            "truncated": len(edits) > max_edits,
+        }
+
+    return {"test_edits": project(proposal.test_edits), "production_edits": project(proposal.production_edits)}
+
+
 def _is_safe_pytest(argv: list[str], repo_root: Path) -> bool:
     expected_python = str(repo_root / ".venv" / "bin" / "python")
     return len(argv) >= 3 and argv[0] == expected_python and argv[1:3] == ["-m", "pytest"]
@@ -353,6 +544,11 @@ def run_allowed_command(argv: list[str], cwd: Path | str, allowed_argvs: list[li
 
 
 def decide_terminal(evidence: GateEvidence) -> TerminalOutcome:
+    if evidence.acceptance_configured:
+        baseline = evidence.acceptance_baseline
+        candidate = evidence.acceptance_candidate
+        if baseline is None or candidate is None or evidence.acceptance_binding is None or evidence.acceptance_final_binding != evidence.acceptance_binding or baseline.timed_out or candidate.timed_out or baseline.returncode != 1 or candidate.returncode != 0:
+            return TerminalOutcome(status=TerminalStatus.BLOCKED, reason="ACCEPTANCE_FAILED")
     checks = (
         (evidence.preflight_ok, "PREFLIGHT_FAILED"),
         (evidence.live_proposal_valid, "INVALID_PROPOSAL"),
@@ -432,11 +628,12 @@ class InvestigateMissionSignature(dspy.Signature):
 
 
 class ProposeEditsSignature(dspy.Signature):
-    """Produce exact-hash test edits first and production edits second, using only supplied evidence."""
+    """Produce exact-hash test edits first and production edits second using only supplied evidence. Multiple same-file replacements are permitted only within one phase when non-overlapping, non-empty, and sharing the original full-file hash; cross-phase reuse is forbidden. When production introduces a new symbol, obtain assertion-level RED through an existing import/module/public API surface and do not import the not-yet-created production symbol in the test-only phase. An expected-error/rejection test must fail if the expected error is absent; silent try/except fallthrough is forbidden—use pytest.raises with a meaningful assertion/match or an explicit failure branch."""
 
     mission: str = dspy.InputField()
     investigation: Investigation = dspy.InputField()
     repository_evidence: str = dspy.InputField()
+    reviewed_learning: str = dspy.InputField()
     proposal: ChangeProposal = dspy.OutputField()
 
 
@@ -489,6 +686,11 @@ class MiniSWEWorkflow:
         for command in (self.mission.focused_test_argv, self.mission.full_test_argv):
             if not _is_safe_pytest(command, self.repo_root):
                 raise ScopeViolation("Mission commands must invoke pytest through repo .venv/bin/python")
+        acceptance_artifact = (
+            validate_acceptance_artifact(self.repo_root, self.mission.allowed_paths, self.mission.acceptance_test_path)
+            if self.mission.acceptance_test_path is not None
+            else None
+        )
         dirty = _dirty_allowed_paths(self.repo_root, self.mission.allowed_paths)
         if dirty:
             raise DirtyAllowedPaths("; ".join(dirty))
@@ -505,6 +707,7 @@ class MiniSWEWorkflow:
             "git_revision": _git_revision(self.repo_root),
             "allowed_paths": self.mission.allowed_paths,
             "reviewed_learning": self.mission.reviewed_learning,
+            "acceptance_artifact": acceptance_artifact,
         }
 
     def _configure_live(self) -> None:
@@ -560,6 +763,7 @@ class MiniSWEWorkflow:
             mission=f"{self.mission.goal}\nExpected RED text: {self.mission.expected_red_text}",
             investigation=investigation,
             repository_evidence=self._repository_evidence(),
+            reviewed_learning=json.dumps(self.mission.reviewed_learning),
         )
         return prediction.proposal if isinstance(prediction.proposal, ChangeProposal) else ChangeProposal.model_validate(prediction.proposal)
 
@@ -598,7 +802,11 @@ class MiniSWEWorkflow:
             ledger.append("scope_check", {"phase": phase, "changed_paths": sorted(changed), "scope_ok": clean})
             return clean, changed
 
-        allowed_commands = [self.mission.focused_test_argv, self.mission.full_test_argv]
+        acceptance_baseline: CommandResult | None = None
+        acceptance_candidate: CommandResult | None = None
+        acceptance_binding: AcceptanceBinding | None = None
+        acceptance_argv = acceptance_pytest_argv(self.repo_root, self.mission.acceptance_test_path) if self.mission.acceptance_test_path else None
+        allowed_commands = [self.mission.focused_test_argv, self.mission.full_test_argv] + ([acceptance_argv] if acceptance_argv else [])
         try:
             preflight = self._preflight()
             initial_revision = preflight["git_revision"]
@@ -618,7 +826,20 @@ class MiniSWEWorkflow:
             if not baseline_green:
                 self._stage_error(ledger, "baseline", RuntimeError("baseline verification failed"))
                 return self._blocked(ledger, run_directory, "BASELINE_FAILED", None)
-            self._stage_end(ledger, "baseline", {"focused": baseline_focused, "full": baseline_full})
+            if acceptance_argv:
+                acceptance_baseline = run_allowed_command(acceptance_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
+                ledger.append("command", {"phase": "acceptance_baseline", "result": acceptance_baseline})
+                clean, changed = scope_gate("after_acceptance_baseline")
+                output = f"{acceptance_baseline.stdout}\n{acceptance_baseline.stderr}"
+                if not clean:
+                    return self._blocked(ledger, run_directory, "OUT_OF_SCOPE_MUTATION", None, {"changed_paths": sorted(changed)})
+                if acceptance_baseline.timed_out or acceptance_baseline.returncode not in (0, 1):
+                    return self._blocked(ledger, run_directory, "ACCEPTANCE_BASELINE_INVALID", None, {"command": acceptance_baseline.model_dump()})
+                if acceptance_baseline.returncode == 0:
+                    return self._blocked(ledger, run_directory, "ACCEPTANCE_ALREADY_PASSES", None, {"command": acceptance_baseline.model_dump()})
+                if self.mission.acceptance_expected_red_text not in output:
+                    return self._blocked(ledger, run_directory, "ACCEPTANCE_BASELINE_INVALID", None, {"command": acceptance_baseline.model_dump()})
+            self._stage_end(ledger, "baseline", {"focused": baseline_focused, "full": baseline_full, "acceptance": acceptance_baseline})
 
             self._stage_start(ledger, "investigation")
             try:
@@ -638,16 +859,23 @@ class MiniSWEWorkflow:
             except Exception as error:
                 self._stage_error(ledger, "proposal", error)
                 return self._blocked(ledger, run_directory, "PROPOSAL_FAILED", None, {"error": repr(error)})
+            ledger.append("proposal_received", {"origin": "injected" if self.proposal_source else "live-predict", "proposal": _bounded_proposal_evidence(proposal)})
             if not isinstance(proposal, ChangeProposal) or not proposal.test_edits:
                 return self._blocked(ledger, run_directory, "INVALID_PROPOSAL", None)
+            try:
+                grouped_proposal = normalize_change_proposal(self.repo_root, self.mission.allowed_paths, proposal)
+            except ProposalValidationError as error:
+                ledger.append("proposal_invalid", {"path": error.path, "error": str(error)})
+                return self._blocked(ledger, run_directory, "INVALID_PROPOSAL", None, {"path": error.path, "error": str(error)})
+            ledger.append("proposal_validated", {"test_paths": [group.path for group in grouped_proposal.test_groups], "production_paths": [group.path for group in grouped_proposal.production_groups]})
             ledger.append("proposal", {"origin": "injected" if self.proposal_source else "live-predict", "output": proposal})
-            self._stage_end(ledger, "proposal", {"test_edit_count": len(proposal.test_edits), "production_edit_count": len(proposal.production_edits)})
+            self._stage_end(ledger, "proposal", {"test_edit_count": len(proposal.test_edits), "production_edit_count": len(proposal.production_edits), "test_group_count": len(grouped_proposal.test_groups), "production_group_count": len(grouped_proposal.production_groups)})
             ledger.append("transition", {"from": WorkflowState.INVESTIGATED, "to": WorkflowState.PROPOSED, "reason": "typed proposal validated"})
 
             self._stage_start(ledger, "test_edit")
-            for edit in proposal.test_edits:
-                applied = apply_exact_text_edit(self.repo_root, self.mission.allowed_paths, edit)
-                applied_paths.add(edit.path)
+            for group in grouped_proposal.test_groups:
+                applied_paths.add(group.path)
+                applied = apply_grouped_edit(group)
                 ledger.append("test_edit", {"edit": applied})
             clean, changed = scope_gate("after_test_edit")
             if not clean:
@@ -671,10 +899,10 @@ class MiniSWEWorkflow:
                 return self._blocked(ledger, run_directory, "INVALID_PROPOSAL", rollback_preimages(), {"error": "production_edits is empty"})
             self._stage_start(ledger, "production_edit")
             production_paths: list[str] = []
-            for edit in proposal.production_edits:
-                applied = apply_exact_text_edit(self.repo_root, self.mission.allowed_paths, edit)
-                applied_paths.add(edit.path)
-                production_paths.append(edit.path)
+            for group in grouped_proposal.production_groups:
+                applied_paths.add(group.path)
+                applied = apply_grouped_edit(group)
+                production_paths.append(group.path)
                 ledger.append("production_edit", {"edit": applied})
             clean, changed = scope_gate("after_production_edit")
             if not clean:
@@ -699,6 +927,19 @@ class MiniSWEWorkflow:
                 self._stage_error(ledger, "full_green", RuntimeError("full verification failed"))
                 return self._blocked(ledger, run_directory, "FULL_GREEN_FAILED" if clean else "OUT_OF_SCOPE_MUTATION", rollback_preimages(), {"command": full.model_dump()})
             self._stage_end(ledger, "full_green", {"returncode": full.returncode})
+            if acceptance_argv:
+                acceptance_candidate = run_allowed_command(acceptance_argv, self.repo_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
+                ledger.append("command", {"phase": "acceptance_candidate", "result": acceptance_candidate})
+                clean, changed = scope_gate("after_acceptance_candidate")
+                if not clean:
+                    return self._blocked(ledger, run_directory, "OUT_OF_SCOPE_MUTATION", rollback_preimages(), {"changed_paths": sorted(changed)})
+                if acceptance_candidate.timed_out or acceptance_candidate.returncode != 0:
+                    return self._blocked(ledger, run_directory, "ACCEPTANCE_FAILED", rollback_preimages(), {"command": acceptance_candidate.model_dump()})
+                acceptance_binding = AcceptanceBinding(
+                    scoped_diff_sha256=sha256_text(_scoped_git_diff(self.repo_root, self.mission.allowed_paths)),
+                    artifact_sha256=sha256_bytes(resolve_repo_file(self.repo_root, self.mission.acceptance_test_path).read_bytes()),
+                )
+                ledger.append("acceptance_binding", acceptance_binding)
             ledger.append("transition", {"from": WorkflowState.RED_CONFIRMED, "to": WorkflowState.GREEN_CONFIRMED, "reason": "focused and full pytest green"})
 
             self._stage_start(ledger, "review")
@@ -709,6 +950,9 @@ class MiniSWEWorkflow:
                 "changed_paths": sorted(changed),
                 "focused_command": focused.model_dump(mode="json"),
                 "full_command": full.model_dump(mode="json"),
+                "acceptance_baseline_command": acceptance_baseline.model_dump(mode="json") if acceptance_baseline else None,
+                "acceptance_candidate_command": acceptance_candidate.model_dump(mode="json") if acceptance_candidate else None,
+                "acceptance_binding": acceptance_binding.model_dump(mode="json") if acceptance_binding else None,
             })
             review_evidence = json.dumps(review_input, sort_keys=True)
             ledger.append("review_input", {"sha256": sha256_text(review_evidence), "input": review_input})
@@ -722,7 +966,20 @@ class MiniSWEWorkflow:
             ledger.append("review", {"origin": "injected" if self.review_source else "live-predict", "output": review})
             self._stage_end(ledger, "review", {"concern_count": len(review.concerns), "evidence_request_count": len(review.evidence_requests)})
 
-            outcome = decide_terminal(GateEvidence(preflight_ok=True, live_proposal_valid=True, baseline_green=True, red_confirmed=True, production_applied=bool(production_paths), focused_green=True, full_green=True, scope_ok=clean, revision_stable=_git_revision(self.repo_root) == initial_revision, rollback_performed=False))
+            clean, changed = scope_gate("after_review")
+            if not clean:
+                return self._blocked(ledger, run_directory, "OUT_OF_SCOPE_MUTATION", rollback_preimages(), {"changed_paths": sorted(changed)})
+            acceptance_final_binding = (
+                AcceptanceBinding(
+                    scoped_diff_sha256=sha256_text(_scoped_git_diff(self.repo_root, self.mission.allowed_paths)),
+                    artifact_sha256=sha256_bytes(resolve_repo_file(self.repo_root, self.mission.acceptance_test_path).read_bytes()),
+                )
+                if acceptance_argv
+                else None
+            )
+            if acceptance_argv and acceptance_final_binding != acceptance_binding:
+                return self._blocked(ledger, run_directory, "ACCEPTANCE_STALE", rollback_preimages())
+            outcome = decide_terminal(GateEvidence(preflight_ok=True, live_proposal_valid=True, baseline_green=True, red_confirmed=True, production_applied=bool(production_paths), focused_green=True, full_green=True, scope_ok=clean, revision_stable=_git_revision(self.repo_root) == initial_revision, rollback_performed=False, acceptance_configured=acceptance_argv is not None, acceptance_baseline=acceptance_baseline, acceptance_candidate=acceptance_candidate, acceptance_binding=acceptance_binding, acceptance_final_binding=acceptance_final_binding))
             if outcome.status is TerminalStatus.BLOCKED:
                 return self._blocked(ledger, run_directory, outcome.reason or "TERMINAL_GATE_FAILED", rollback_preimages())
             ledger.append("terminal", {"state": WorkflowState.DONE, "changed_paths": sorted(changed), "review_concerns": review.concerns})

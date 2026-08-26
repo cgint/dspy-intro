@@ -247,6 +247,33 @@ def test_load_mission_file_binds_external_repo_model_and_reviewed_learning(tmp_p
     assert mission.mission_provenance == str(mission_file.resolve())
 
 
+def test_live_proposal_guides_assertion_red_existing_surface_and_receives_learning(tmp_path, monkeypatch):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    mission = make_mission(runner, repo).model_copy(update={"reviewed_learning": ["accepted-guidance"]})
+    workflow = runner.MiniSWEWorkflow(mission, tmp_path / "runs")
+    captured: dict[str, object] = {}
+
+    class FakePredict:
+        def __init__(self, signature):
+            assert signature is runner.ProposeEditsSignature
+
+        def __call__(self, **kwargs):
+            captured.update(kwargs)
+            return type("Prediction", (), {"proposal": runner.ChangeProposal()})()
+
+    monkeypatch.setattr(workflow, "_configure_live", lambda: None)
+    monkeypatch.setattr(runner.dspy, "Predict", FakePredict)
+    workflow._live_proposal(runner.Investigation(facts=["fact"], category="category"))
+
+    instruction = runner.ProposeEditsSignature.__doc__
+    assert "assertion-level RED" in instruction
+    assert "existing import/module/public API surface" in instruction
+    assert "not-yet-created production symbol" in instruction
+    assert "expected-error/rejection test must fail if the expected error is absent" in instruction
+    assert captured["reviewed_learning"] == json.dumps(["accepted-guidance"])
+
+
 def test_runner_blocks_dirty_allowed_file_before_any_source(tmp_path):
     runner = runner_module()
     repo = make_repo(tmp_path)
@@ -400,6 +427,148 @@ def test_runner_preserves_mode_and_rolls_back_only_modified_path(tmp_path):
     assert rollback["payload"]["paths"] == ["check.py"]
 
 
+def test_grouped_same_file_test_edits_write_once_and_produce_red(tmp_path):
+    runner = runner_module()
+    check_source = (
+        "def test_alpha():\n    assert True\n\n"
+        "def test_beta():\n    assert True\n"
+    )
+    repo = make_repo(tmp_path, check_source)
+    mission = make_mission(runner, repo, expected_red_text="GROUPED_RED")
+    check_before = (repo / "check.py").read_text()
+    source_before = (repo / "source.py").read_text()
+    proposal = runner.ChangeProposal(
+        test_edits=[
+            runner.ExactTextEdit(path="check.py", expected_sha256=runner.sha256_text(check_before), old_text="def test_alpha():\n    assert True\n", new_text="def test_alpha():\n    assert 'alpha' in open('source.py').read(), 'GROUPED_RED'\n"),
+            runner.ExactTextEdit(path="check.py", expected_sha256=runner.sha256_text(check_before), old_text="def test_beta():\n    assert True\n", new_text="def test_beta():\n    assert 'beta' in open('source.py').read(), 'GROUPED_RED'\n"),
+        ],
+        production_edits=[runner.ExactTextEdit(path="source.py", expected_sha256=runner.sha256_text(source_before), old_text="    event_publishers = []\n", new_text="    event_publishers = []\n    alpha = True\n    beta = True\n")],
+    )
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs", **sources(runner, proposal)).run()
+
+    assert result.status == runner.TerminalStatus.DONE
+    events = [json.loads(line) for line in result.ledger_path.read_text().splitlines()]
+    assert [event["payload"]["edit"]["path"] for event in events if event["event"] == "test_edit"] == ["check.py"]
+    assert any(event["event"] == "red_confirmed" for event in events)
+    assert any(event["event"] == "proposal_received" for event in events)
+    assert any(event["event"] == "proposal_validated" for event in events)
+
+
+def test_grouped_normalization_rejects_ambiguous_edits_before_writes(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    before = (repo / "source.py").read_text()
+    valid = runner.ExactTextEdit(path="source.py", expected_sha256=runner.sha256_text(before), old_text="    event_publishers = []\n", new_text="    one = []\n")
+    cases = [
+        runner.ChangeProposal(test_edits=[runner.ExactTextEdit(path="./source.py", expected_sha256=valid.expected_sha256, old_text=valid.old_text, new_text=valid.new_text)]),
+        runner.ChangeProposal(test_edits=[valid, runner.ExactTextEdit(path="source.py", expected_sha256="0" * 64, old_text="class CallTree:\n", new_text="class Other:\n")]),
+        runner.ChangeProposal(test_edits=[runner.ExactTextEdit(path="source.py", expected_sha256=valid.expected_sha256, old_text="", new_text="x")]),
+        runner.ChangeProposal(test_edits=[valid, valid]),
+        runner.ChangeProposal(test_edits=[runner.ExactTextEdit(path="source.py", expected_sha256=valid.expected_sha256, old_text="class CallTree:\n    event_publishers", new_text="x"), runner.ExactTextEdit(path="source.py", expected_sha256=valid.expected_sha256, old_text="    event_publishers = []\n", new_text="y")]),
+        runner.ChangeProposal(test_edits=[valid], production_edits=[valid]),
+    ]
+
+    for proposal in cases:
+        with pytest.raises(runner.ProposalValidationError):
+            runner.normalize_change_proposal(repo, ["source.py"], proposal)
+        assert (repo / "source.py").read_text() == before
+
+    alias = repo / "source-alias.py"
+    alias.hardlink_to(repo / "source.py")
+    alias_edit = runner.ExactTextEdit(path="source-alias.py", expected_sha256=valid.expected_sha256, old_text=valid.old_text, new_text=valid.new_text)
+    with pytest.raises(runner.ProposalValidationError):
+        runner.normalize_change_proposal(
+            repo,
+            ["source.py", "source-alias.py"],
+            runner.ChangeProposal(test_edits=[valid], production_edits=[alias_edit]),
+        )
+
+
+def test_grouped_normalization_is_order_independent(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path, "first = 1\nsecond = 2\n")
+    before = (repo / "check.py").read_text()
+    first = runner.ExactTextEdit(path="check.py", expected_sha256=runner.sha256_text(before), old_text="first = 1", new_text="first = 10")
+    second = runner.ExactTextEdit(path="check.py", expected_sha256=runner.sha256_text(before), old_text="second = 2", new_text="second = 20")
+    forward = runner.normalize_change_proposal(repo, ["check.py"], runner.ChangeProposal(test_edits=[first, second]))
+    reverse = runner.normalize_change_proposal(repo, ["check.py"], runner.ChangeProposal(test_edits=[second, first]))
+
+    assert forward.test_groups[0].after_bytes == reverse.test_groups[0].after_bytes
+    (repo / "check.py").write_text("abcdef")
+    adjacent_before = (repo / "check.py").read_text()
+    adjacent = runner.normalize_change_proposal(
+        repo,
+        ["check.py"],
+        runner.ChangeProposal(test_edits=[
+            runner.ExactTextEdit(path="check.py", expected_sha256=runner.sha256_text(adjacent_before), old_text="abc", new_text="ABC"),
+            runner.ExactTextEdit(path="check.py", expected_sha256=runner.sha256_text(adjacent_before), old_text="def", new_text="DEF"),
+        ]),
+    )
+    assert adjacent.test_groups[0].after_bytes == b"ABCDEF"
+
+
+def test_grouped_second_write_failure_rolls_back_first(tmp_path, monkeypatch):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    mission = make_mission(runner, repo)
+    check_before = (repo / "check.py").read_text()
+    source_before = (repo / "source.py").read_text()
+    proposal = runner.ChangeProposal(
+        test_edits=[
+            runner.ExactTextEdit(path="check.py", expected_sha256=runner.sha256_text(check_before), old_text=check_before, new_text="def test_failure():\n    assert False, 'EVENT_SUBSCRIBERS_MISSING'\n"),
+            runner.ExactTextEdit(path="source.py", expected_sha256=runner.sha256_text(source_before), old_text="    event_publishers = []\n", new_text="    event_publishers = ['pending']\n"),
+        ]
+    )
+    original_replace = runner.os.replace
+    failed = False
+
+    def fail_second(source, destination):
+        nonlocal failed
+        if Path(destination).name == "source.py" and not failed:
+            failed = True
+            raise OSError("second write failed")
+        return original_replace(source, destination)
+
+    monkeypatch.setattr(runner.os, "replace", fail_second)
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs", **sources(runner, proposal)).run()
+
+    assert result.reason == "EDIT_VALIDATION_FAILED"
+    assert (repo / "check.py").read_text() == check_before
+    assert (repo / "source.py").read_text() == source_before
+    assert any(json.loads(line)["event"] == "rollback" for line in result.ledger_path.read_text().splitlines())
+
+
+def test_runner_rejects_duplicate_path_proposal_before_any_write(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    mission = make_mission(runner, repo)
+    check_before = (repo / "check.py").read_text()
+    source_before = (repo / "source.py").read_text()
+    duplicate_edit = runner.ExactTextEdit(
+        path="check.py",
+        expected_sha256=runner.sha256_text(check_before),
+        old_text=check_before,
+        new_text="def test_duplicate_path():\n    assert False\n",
+    )
+    proposal = runner.ChangeProposal(test_edits=[duplicate_edit], production_edits=[duplicate_edit])
+
+    result = runner.MiniSWEWorkflow(
+        mission=mission,
+        run_root=tmp_path / "runs",
+        **sources(runner, proposal),
+    ).run()
+
+    assert result.status == runner.TerminalStatus.BLOCKED
+    assert result.reason == "INVALID_PROPOSAL"
+    assert (repo / "check.py").read_text() == check_before
+    assert (repo / "source.py").read_text() == source_before
+    events = [json.loads(line) for line in result.ledger_path.read_text().splitlines()]
+    invalid = next(event for event in events if event["event"] == "proposal_invalid")
+    assert invalid["payload"]["path"] == "check.py"
+    assert not any(event["event"] == "test_edit" for event in events)
+    assert not any(event["event"] == "rollback" for event in events)
+
+
 def test_runner_blocks_malformed_proposal_without_fallback(tmp_path):
     runner = runner_module()
     repo = make_repo(tmp_path)
@@ -451,3 +620,135 @@ def test_runner_blocks_out_of_scope_command_mutation(tmp_path):
     ).run()
     assert result.status == runner.TerminalStatus.BLOCKED
     assert result.reason == "OUT_OF_SCOPE_MUTATION"
+
+
+def acceptance_mission(runner, repo: Path, source: str | None = None):
+    artifact = repo / "acceptance.py"
+    artifact.write_text(source or "from pathlib import Path\n\ndef test_held_out():\n    assert 'event_subscribers' in Path('source.py').read_text(), 'HELD_OUT_MISSING'\n")
+    git(repo, "add", "acceptance.py")
+    git(repo, "commit", "-qm", "add acceptance oracle")
+    return make_mission(runner, repo).model_copy(update={"acceptance_test_path": "acceptance.py", "acceptance_expected_red_text": "HELD_OUT_MISSING"})
+
+
+def test_held_out_acceptance_contract(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    with pytest.raises(ValueError):
+        runner.Mission(**(make_mission(runner, repo).model_dump() | {"acceptance_test_path": "acceptance.py"}))
+    mission = acceptance_mission(runner, repo)
+    assert runner.validate_acceptance_artifact(repo, mission.allowed_paths, mission.acceptance_test_path).sha256
+    with pytest.raises(runner.ScopeViolation):
+        runner.validate_acceptance_artifact(repo, mission.allowed_paths, "check.py")
+    (repo / "alias.py").hardlink_to(repo / "acceptance.py")
+    with pytest.raises(runner.ScopeViolation):
+        runner.validate_acceptance_artifact(repo, mission.allowed_paths, "alias.py")
+
+
+def test_held_out_acceptance_orders_gates_and_binds_review(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    mission = acceptance_mission(runner, repo)
+    seen = {}
+    def review(_m, _i, _p, evidence):
+        seen.update(json.loads(evidence))
+        return runner.PostGreenReview(judgment="reviewed", concerns=[], evidence_requests=[])
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs", investigation_source=lambda _m: runner.Investigation(facts=[], category="test"), proposal_source=lambda _m, _i: successful_proposal(runner, repo), review_source=review).run()
+    assert result.status is runner.TerminalStatus.DONE
+    assert seen["acceptance_baseline_command"]["returncode"] == 1
+    assert seen["acceptance_candidate_command"]["returncode"] == 0
+    events = [json.loads(line) for line in result.ledger_path.read_text().splitlines()]
+    assert [e["payload"]["phase"] for e in events if e["event"] == "command"] == ["baseline_focused", "baseline_full", "acceptance_baseline", "focused_red", "focused_green", "full_green", "acceptance_candidate"]
+
+
+@pytest.mark.parametrize("source, reason", [("def test_held_out():\n    assert True\n", "ACCEPTANCE_ALREADY_PASSES"), ("def test_held_out():\n    assert False, 'WRONG'\n", "ACCEPTANCE_BASELINE_INVALID")])
+def test_held_out_baseline_blocks_before_sources(tmp_path, source, reason):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    mission = acceptance_mission(runner, repo, source)
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs", investigation_source=lambda _m: pytest.fail("source called")).run()
+    assert result.reason == reason
+
+
+def test_held_out_candidate_failure_rolls_back_and_terminal_requires_evidence(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    mission = acceptance_mission(runner, repo, "def test_held_out():\n    assert False, 'HELD_OUT_MISSING'\n")
+    before = (repo / "source.py").read_text()
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs", **sources(runner, successful_proposal(runner, repo))).run()
+    assert result.reason == "ACCEPTANCE_FAILED"
+    assert (repo / "source.py").read_text() == before
+    evidence = runner.GateEvidence(preflight_ok=True, live_proposal_valid=True, baseline_green=True, red_confirmed=True, production_applied=True, focused_green=True, full_green=True, scope_ok=True, revision_stable=True, rollback_performed=False, acceptance_configured=True, acceptance_baseline=None, acceptance_candidate=None)
+    assert runner.decide_terminal(evidence).reason == "ACCEPTANCE_FAILED"
+
+
+def test_held_out_baseline_rc2_timeout_and_mutation_block_before_sources(tmp_path, monkeypatch):
+    runner = runner_module()
+    for source, reason in [("def test_held_out(:\n", "ACCEPTANCE_BASELINE_INVALID"), ("from pathlib import Path\n\ndef test_held_out():\n    Path('outside.txt').write_text('x')\n    assert False, 'HELD_OUT_MISSING'\n", "OUT_OF_SCOPE_MUTATION")]:
+        case_root = tmp_path / reason
+        case_root.mkdir()
+        repo = make_repo(case_root)
+        mission = acceptance_mission(runner, repo, source)
+        result = runner.MiniSWEWorkflow(mission, tmp_path / f"runs-{reason}", investigation_source=lambda _m: pytest.fail("source called")).run()
+        assert result.reason == reason
+    timeout_root = tmp_path / "timeout"
+    timeout_root.mkdir()
+    repo = make_repo(timeout_root)
+    mission = acceptance_mission(runner, repo)
+    original = runner.run_allowed_command
+    def timeout(argv, *args):
+        if argv[-2] == "acceptance.py":
+            return runner.CommandResult(argv=argv, allowed=True, returncode=None, stdout="", stderr="", timed_out=True)
+        return original(argv, *args)
+    monkeypatch.setattr(runner, "run_allowed_command", timeout)
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs-timeout", investigation_source=lambda _m: pytest.fail("source called")).run()
+    assert result.reason == "ACCEPTANCE_BASELINE_INVALID"
+
+
+def test_held_out_candidate_mutation_and_review_staleness_roll_back(tmp_path):
+    runner = runner_module()
+    candidate_root = tmp_path / "candidate"
+    candidate_root.mkdir()
+    repo = make_repo(candidate_root)
+    mission = acceptance_mission(runner, repo, "from pathlib import Path\n\ndef test_held_out():\n    if 'event_subscribers' in Path('source.py').read_text():\n        Path('outside.txt').write_text('x')\n        return\n    assert False, 'HELD_OUT_MISSING'\n")
+    before = (repo / "source.py").read_text()
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs-candidate", **sources(runner, successful_proposal(runner, repo))).run()
+    assert result.reason == "OUT_OF_SCOPE_MUTATION"
+    assert (repo / "source.py").read_text() == before
+    stale_root = tmp_path / "stale"
+    stale_root.mkdir()
+    repo = make_repo(stale_root)
+    mission = acceptance_mission(runner, repo)
+    before = (repo / "source.py").read_text()
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs-stale", investigation_source=lambda _m: runner.Investigation(facts=[], category="test"), proposal_source=lambda _m, _i: successful_proposal(runner, repo), review_source=lambda *_args: (((repo / "source.py").write_text("stale\n"), runner.PostGreenReview(judgment="reviewed", concerns=[], evidence_requests=[]))[1])).run()
+    assert result.reason == "ACCEPTANCE_STALE"
+    assert (repo / "source.py").read_text() == before
+
+
+def test_load_mission_file_acceptance_fields_are_paired_and_backward_compatible(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    base = make_mission(runner, repo).model_dump(exclude={"repo_root", "model_name", "reviewed_learning", "mission_provenance"})
+    mission_file = tmp_path / "mission.json"
+    mission_file.write_text(json.dumps(base | {"acceptance_test_path": "oracle.py", "acceptance_expected_red_text": "marker"}))
+    loaded = runner.load_mission_file(mission_file, repo, "gemini/gemini-3.5-flash-lite")
+    assert loaded.acceptance_test_path == "oracle.py" and loaded.acceptance_expected_red_text == "marker"
+    mission_file.write_text(json.dumps(base))
+    assert runner.load_mission_file(mission_file, repo, "gemini/gemini-3.5-flash-lite").acceptance_test_path is None
+    mission_file.write_text(json.dumps(base | {"acceptance_test_path": "oracle.py"}))
+    with pytest.raises(ValueError):
+        runner.load_mission_file(mission_file, repo, "gemini/gemini-3.5-flash-lite")
+
+
+def test_real_g5_mission_binds_stable_protected_oracle_contract():
+    runner = runner_module()
+    root = RUNNER_PATH.parents[2]
+    mission = runner.load_mission_file(root / "src/workflow/mini-swe-missions/G5-structured-git-archeology.json", root, "gemini/gemini-3.5-flash-lite")
+    assert mission.acceptance_test_path == "src/workflow/mini-swe-acceptance/G5-structured-git-archeology.py"
+    assert mission.acceptance_expected_red_text == "G5_HELD_OUT_GIT_ARCHEOLOGY"
+    assert mission.full_test_argv == [str(root / ".venv/bin/python"), "-m", "pytest", "-p", "no:cacheprovider", "tests", "-q"]
+    artifact = runner.validate_acceptance_artifact(root, mission.allowed_paths, mission.acceptance_test_path)
+    assert artifact.sha256 == "37ed232fa41c9a274412771659157ec322afb5a877b8208fa9e8a71aec03017e"
+    assert runner.acceptance_pytest_argv(root, mission.acceptance_test_path) == [
+        str(root / ".venv/bin/python"), "-m", "pytest", "-p", "no:cacheprovider",
+        "src/workflow/mini-swe-acceptance/G5-structured-git-archeology.py", "-q",
+    ]
