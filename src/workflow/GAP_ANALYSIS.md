@@ -264,7 +264,18 @@ map above and from the historical read-only verdicts in §7.
   `38c36923769ff9edbcc07656dce22fb8518f01901bd5cac139bf8ce50079af60` produced zero
   candidates (SHA `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`).
   Protected acceptance now rejects calibrated success without a real score; G10 remains
-  open with no reauthorization.
+  open with no reauthorization. Final no-retry G10 evidence: trace SHA
+  `50f56bd569f8d0b404f8a9f5dfc9a5d8a34d87b1e8d33a44ccff2c035e8797eb` confirmed RED
+  at sequence 34, then BLOCKED `FOCUSED_GREEN_FAILED` at terminal sequence 47 because
+  focused GREEN collection rc2 found `Optional` unbound at sequence 43; rollback was
+  clean and product paths remain clean. Learner manifest SHA
+  `f972b28449137f244bf5eb24115225afc37fe1c4ebb2e768dd5a497eeb5f758e` and candidates
+  SHA `d55a57e34eb14991472b87d3719bcbf010dabdaafcf519875417d22a9b4ebda8` produced one
+  Optional-import candidate rejected as redundant: existing tested generic import-
+  binding guidance already covers it. Protected oracle SHA remains
+  `7c2cfbc1eb22ac9b55a9d0f2d53bbd43b124916257f89ef15805152db68d0aa9`.
+  Autonomous G10 retries are paused. G10 remains open, unimplemented, and unauthorized;
+  next progress requires a different execution strategy, not another prompt retry.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in
