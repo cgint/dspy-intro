@@ -26,3 +26,11 @@ Preflight rejects dirty allow-listed files and unsafe commands. Every observatio
 Each run writes a sanitized append-only JSONL trace under the external run root before DSPy calls. It records provenance, stage transitions, bounded tools, proposals, commands, scope checks, review input/hash, review, and terminal evidence.
 
 V0 has no shell tool or model write tool, permits exact edits only to existing allow-listed files, and allows only repo-venv pytest commands. Tests inject DSPy sources; they do not call providers. This runner does not promote learner candidates or replace mechanical terminal gates with model judgment.
+
+## Proposed V1 direction — not implemented
+
+V0 remains a single contained mission transaction: a separate read-only ReAct investigation, a typed edit proposal, Python-owned gates, and a non-gating post-GREEN review. The following is the next bounded learning slice only; it changes no runtime behavior. G10 remains separate.
+
+V1 would freeze the investigation facts and tool trace, then run a sanity checkpoint with exactly one outcome: `PROCEED`, `NEEDS_EVIDENCE`, or `BLOCKED`. `NEEDS_EVIDENCE` may permit one specifically justified fresh investigation question before proposal. It must not trigger automatic repeated edits or an unbounded investigation/edit loop.
+
+Tools would be standardized as bounded capabilities assigned per role, each with a declared purpose, scope, timeout, output contract, provenance, and deterministic enforcement. V1 does not add a general shell. Local prior art to examine—not adopted designs—is `../agent-coding-assistant/dspy_agent_tool_restricted_shell.py`, `../agent-coding-assistant/cli_gather_info.py`, and `../ops-resolver/src/tool_shell.py`. Their `shell=True` prefix checks are not a policy design to copy.
