@@ -221,8 +221,18 @@ map above and from the historical read-only verdicts in §7.
   SHA `b24e98d3932adb3088ea8b14c6ef961358d0365eab84b81bb9d8918329184014` yielded one
   candidate accepted with revision: inspect/reuse existing module-top bindings and
   never add a function-local import for an existing module-scope name, which shadows
-  the entire local scope. This is guidance only; G10 is not implemented, rerun,
-  accepted, or closed.
+  the entire local scope. A second no-retry G10 run confirmed RED at sequence 34 but
+  BLOCKED `FOCUSED_GREEN_FAILED` at terminal sequence 47: trace SHA
+  `86e0c0f865bcd66662b5b3eac9bd77d8e3db16d7b4fc6c5afede1258a254c5d9`.
+  Focused GREEN collection rc2 arose from `Optional[int]` without an `Optional` binding;
+  rollback was clean. Its proposal also had a latent semantic rejection: it raised
+  `ValueError` for unresolved proposals rather than returning the first-class failure
+  verdict, so protected acceptance was not reached. Learner manifest SHA
+  `b41e98829512900a9dad3583660ef648e9c25641ff20dc036e3c0e46fe87fde8`, candidates SHA
+  `cd0f8bec2ab852389addf02fb32fd3f3139bb80a6f70df1a582a2fe4c8e64767`, emitted one
+  Optional-import candidate rejected as redundant because existing tested generic
+  module-top import-binding guidance already covers it. This is guidance only; G10 is
+  not implemented, rerun, accepted, or closed, and no reauthorization exists.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in
