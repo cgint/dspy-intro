@@ -112,6 +112,123 @@ def sources(runner, proposal, concerns: list[str] | None = None):
     }
 
 
+def test_v1_sanity_proceed_and_one_follow_up_are_hash_pinned(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    mission = make_mission(runner, repo)
+    calls = {"proposal": 0, "sanity": 0}
+
+    def proposal(_mission, _investigation):
+        calls["proposal"] += 1
+        return successful_proposal(runner, repo)
+
+    def sanity(_mission, _investigation, _packet):
+        calls["sanity"] += 1
+        return runner.SanityDecision(status="NEEDS_EVIDENCE", reason="inspect source", capability=runner.EvidenceCapability(kind="bounded_read", path="source.py"))
+
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs", investigation_source=sources(runner, successful_proposal(runner, repo))["investigation_source"], proposal_source=proposal, review_source=sources(runner, successful_proposal(runner, repo))["review_source"], sanity_source=sanity).run()
+    assert result.status is runner.TerminalStatus.DONE
+    assert calls == {"proposal": 1, "sanity": 1}
+    events = [json.loads(line) for line in result.ledger_path.read_text().splitlines()]
+    assert {"sanity_packet", "sanity", "evidence_follow_up", "preview"} <= {event["event"] for event in events}
+    assert all(event["payload"].get("sha256") for event in events if event["event"] in {"sanity_packet", "evidence_follow_up", "preview"})
+
+
+def test_v1_sanity_packet_binds_redacted_persisted_investigator_trace(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    workflow = runner.MiniSWEWorkflow(make_mission(runner, repo), tmp_path / "runs")
+    ledger = runner.EventLedger(tmp_path / "trace.jsonl")
+    ledger.append("tool", {"tool": "read_repo_file", "output": {"token": "private-token"}})
+    ledger.append("tool_error", {"tool": "search_repo", "credential": "private-key"})
+    ledger.append("react_trajectory", {"trajectory": {"step": "searched"}})
+    ledger.append("proposal", {"ignored": True})
+
+    packet = workflow._evidence_packet(runner.Investigation(facts=["fact"], category="test"), ledger)
+
+    assert packet["investigator_trace"] == ledger.records({"tool", "tool_error", "react_trajectory"})
+    encoded = json.dumps(packet, sort_keys=True)
+    assert "private-token" not in encoded and "private-key" not in encoded
+    assert "[REDACTED]" in encoded
+
+
+def test_v1_preview_copy_excludes_dotenv_files(tmp_path, monkeypatch):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    (repo / ".env").write_text("secret\n")
+    (repo / ".env.local").write_text("secret\n")
+    (repo / "nested").mkdir()
+    (repo / "nested" / ".env.production").write_text("secret\n")
+    original_copytree = runner.shutil.copytree
+
+    def checked_copytree(source, destination, *args, **kwargs):
+        copied = original_copytree(source, destination, *args, **kwargs)
+        destination = Path(destination)
+        if destination.name == "workspace":
+            assert not (destination / ".env").exists()
+            assert not (destination / ".env.local").exists()
+            assert not (destination / "nested" / ".env.production").exists()
+        return copied
+
+    monkeypatch.setattr(runner.shutil, "copytree", checked_copytree)
+    result = runner.MiniSWEWorkflow(make_mission(runner, repo), tmp_path / "runs", **sources(runner, successful_proposal(runner, repo))).run()
+    assert result.status is runner.TerminalStatus.DONE
+
+
+@pytest.mark.parametrize("decision, reason", [
+    (lambda runner: runner.SanityDecision(status="BLOCKED", reason="insufficient"), "SANITY_BLOCKED"),
+    (lambda runner: {"status": "NEEDS_EVIDENCE", "reason": "missing"}, "INVALID_SANITY"),
+])
+def test_v1_sanity_blocks_before_proposal(tmp_path, decision, reason):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    called = False
+
+    def proposal(_mission, _investigation):
+        nonlocal called
+        called = True
+        return successful_proposal(runner, repo)
+
+    result = runner.MiniSWEWorkflow(make_mission(runner, repo), tmp_path / "runs", investigation_source=sources(runner, successful_proposal(runner, repo))["investigation_source"], proposal_source=proposal, sanity_source=lambda _m, _i, _p: decision(runner)).run()
+    assert result.reason == reason
+    assert called is False
+
+
+def test_v1_preview_failure_preserves_real_paths_and_does_not_enter_real_gates(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    before = {path: (repo / path).read_bytes() for path in ("check.py", "source.py")}
+    bad = successful_proposal(runner, repo)
+    bad.test_edits[0].new_text = "def test_bad():\n    assert False, 'WRONG'\n"
+    proposal_calls = 0
+    review_calls = 0
+
+    def proposal(_mission, _investigation):
+        nonlocal proposal_calls
+        proposal_calls += 1
+        return bad
+
+    def review(*_args):
+        nonlocal review_calls
+        review_calls += 1
+        return runner.PostGreenReview(judgment="unused")
+
+    result = runner.MiniSWEWorkflow(make_mission(runner, repo), tmp_path / "runs", investigation_source=sources(runner, bad)["investigation_source"], proposal_source=proposal, review_source=review).run()
+    assert result.reason == "PREVIEW_RED_NOT_CONFIRMED"
+    assert {path: (repo / path).read_bytes() for path in before} == before
+    assert proposal_calls == 1
+    assert review_calls == 0
+
+
+def test_v1_preview_success_enters_unchanged_v0_gates(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    result = runner.MiniSWEWorkflow(make_mission(runner, repo), tmp_path / "runs", **sources(runner, successful_proposal(runner, repo))).run()
+    assert result.status is runner.TerminalStatus.DONE
+    events = [json.loads(line) for line in result.ledger_path.read_text().splitlines()]
+    assert next(index for index, event in enumerate(events) if event["event"] == "preview") < next(index for index, event in enumerate(events) if event["event"] == "test_edit")
+
+
 def test_repo_root_containment_rejects_escape_and_symlink(tmp_path):
     runner = runner_module()
     repo = make_repo(tmp_path)
@@ -390,7 +507,7 @@ def test_runner_rejects_returncode_two_even_when_expected_text_is_present(tmp_pa
         **sources(runner, proposal),
     ).run()
     assert result.status == runner.TerminalStatus.BLOCKED
-    assert result.reason == "RED_NOT_CONFIRMED"
+    assert result.reason == "PREVIEW_RED_NOT_CONFIRMED"
 
 
 def test_runner_preserves_mode_and_rolls_back_only_modified_path(tmp_path):
@@ -419,12 +536,11 @@ def test_runner_preserves_mode_and_rolls_back_only_modified_path(tmp_path):
         run_root=tmp_path / "runs",
         **sources(runner, proposal),
     ).run()
-    assert result.reason == "RED_NOT_CONFIRMED"
+    assert result.reason == "PREVIEW_RED_NOT_CONFIRMED"
     assert check.read_text() == original_test
     assert (repo / "source.py").read_text() == original_source
     assert check.stat().st_mode & 0o777 == 0o744
-    rollback = next(json.loads(line) for line in result.ledger_path.read_text().splitlines() if json.loads(line)["event"] == "rollback")
-    assert rollback["payload"]["paths"] == ["check.py"]
+    assert not any(json.loads(line)["event"] == "rollback" for line in result.ledger_path.read_text().splitlines())
 
 
 def test_grouped_same_file_test_edits_write_once_and_produce_red(tmp_path):
@@ -532,10 +648,10 @@ def test_grouped_second_write_failure_rolls_back_first(tmp_path, monkeypatch):
     monkeypatch.setattr(runner.os, "replace", fail_second)
     result = runner.MiniSWEWorkflow(mission, tmp_path / "runs", **sources(runner, proposal)).run()
 
-    assert result.reason == "EDIT_VALIDATION_FAILED"
+    assert result.reason == "PREVIEW_EDIT_INVALID"
     assert (repo / "check.py").read_text() == check_before
     assert (repo / "source.py").read_text() == source_before
-    assert any(json.loads(line)["event"] == "rollback" for line in result.ledger_path.read_text().splitlines())
+    assert not any(json.loads(line)["event"] == "rollback" for line in result.ledger_path.read_text().splitlines())
 
 
 def test_runner_rejects_duplicate_path_proposal_before_any_write(tmp_path):
@@ -619,7 +735,7 @@ def test_runner_blocks_out_of_scope_command_mutation(tmp_path):
         **sources(runner, proposal),
     ).run()
     assert result.status == runner.TerminalStatus.BLOCKED
-    assert result.reason == "COMMAND_MUTATION"
+    assert result.reason == "PREVIEW_COMMAND_MUTATION"
 
 
 def acceptance_mission(runner, repo: Path, source: str | None = None):
@@ -675,7 +791,7 @@ def test_held_out_candidate_failure_rolls_back_and_terminal_requires_evidence(tm
     mission = acceptance_mission(runner, repo, "def test_held_out():\n    assert False, 'HELD_OUT_MISSING'\n")
     before = (repo / "source.py").read_text()
     result = runner.MiniSWEWorkflow(mission, tmp_path / "runs", **sources(runner, successful_proposal(runner, repo))).run()
-    assert result.reason == "ACCEPTANCE_FAILED"
+    assert result.reason == "PREVIEW_ACCEPTANCE_CANDIDATE_FAILED"
     assert (repo / "source.py").read_text() == before
     evidence = runner.GateEvidence(preflight_ok=True, live_proposal_valid=True, baseline_green=True, red_confirmed=True, production_applied=True, focused_green=True, full_green=True, scope_ok=True, revision_stable=True, rollback_performed=False, acceptance_configured=True, acceptance_baseline=None, acceptance_candidate=None)
     assert runner.decide_terminal(evidence).reason == "ACCEPTANCE_FAILED"
@@ -712,7 +828,7 @@ def test_held_out_candidate_mutation_and_review_staleness_roll_back(tmp_path):
     mission = acceptance_mission(runner, repo, "from pathlib import Path\n\ndef test_held_out():\n    if 'event_subscribers' in Path('source.py').read_text():\n        Path('outside.txt').write_text('x')\n        return\n    assert False, 'HELD_OUT_MISSING'\n")
     before = (repo / "source.py").read_text()
     result = runner.MiniSWEWorkflow(mission, tmp_path / "runs-candidate", **sources(runner, successful_proposal(runner, repo))).run()
-    assert result.reason == "COMMAND_MUTATION"
+    assert result.reason == "PREVIEW_COMMAND_MUTATION"
     assert (repo / "source.py").read_text() == before
     stale_root = tmp_path / "stale"
     stale_root.mkdir()
@@ -822,7 +938,7 @@ def test_ruff_gate_baseline_blocks_before_sources_and_candidate_failure_rolls_ba
         return original(argv, *args)
     monkeypatch.setattr(runner, "run_allowed_command", candidate_fail)
     result = runner.MiniSWEWorkflow(mission, tmp_path / "runs-candidate", **sources(runner, successful_proposal(runner, repo))).run()
-    assert result.reason == "RUFF_CHECK_FAILED" and (repo / "source.py").read_text() == before
+    assert result.reason == "PREVIEW_CANDIDATE_RUFF_FAILED" and (repo / "source.py").read_text() == before
 
 
 def test_ruff_gate_orders_commands_binds_terminal_and_review(tmp_path):
@@ -899,7 +1015,7 @@ def test_ruff_audit_timeouts_and_mutations_block_with_required_rollback(tmp_path
     if phase.startswith("baseline"):
         assert result.reason == ("RUFF_BASELINE_FAILED" if phase.endswith("timeout") else "COMMAND_MUTATION")
     else:
-        assert result.reason == ("RUFF_CHECK_FAILED" if phase.endswith("timeout") else "COMMAND_MUTATION")
+        assert result.reason == ("PREVIEW_CANDIDATE_RUFF_FAILED" if phase.endswith("timeout") else "PREVIEW_COMMAND_MUTATION")
         assert (repo / "source.py").read_text() == source_before and (repo / "check.py").read_text() == check_before
 
 
@@ -1040,11 +1156,12 @@ def test_command_mutation_audit_candidate_rollback_order_and_residual_outside_fi
         return original(argv, *args)
     monkeypatch.setattr(runner, "run_allowed_command", mutate_candidate)
     result = runner.MiniSWEWorkflow(mission, tmp_path / "candidate", **sources(runner, successful_proposal(runner, repo))).run()
-    assert result.reason == "COMMAND_MUTATION"
+    assert result.reason == "PREVIEW_COMMAND_MUTATION"
     assert (repo / "source.py").read_text() == source_before
     assert (repo / "outside.txt").read_text() == "unowned\n"
     events = [json.loads(line) for line in result.ledger_path.read_text().splitlines()]
-    command = next(i for i, event in enumerate(events) if event["event"] == "command" and event["payload"]["phase"] == "candidate_ruff")
-    assert events[command + 1]["event"] == "command_mutation"
-    assert events[command + 1]["payload"]["changed_paths"] == ["outside.txt", "source.py"]
+    preview = next(event for event in events if event["event"] == "preview")
+    assert preview["payload"]["transcript"][-1]["phase"] == "candidate_ruff"
+    assert preview["payload"]["transcript"][-1]["real_changed_paths"] == ["outside.txt", "source.py"]
+    assert not any(event["event"] == "command" and event["payload"]["phase"] == "candidate_ruff" for event in events)
     assert any(event["event"] == "rollback" for event in events)

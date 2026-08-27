@@ -12,10 +12,12 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import sys
 import time
+import tempfile
 import uuid
 from dataclasses import dataclass
 from enum import Enum
@@ -126,6 +128,38 @@ class PostGreenReview(BaseModel):
     judgment: str
     concerns: list[str] = Field(default_factory=list)
     evidence_requests: list[str] = Field(default_factory=list)
+
+
+class EvidenceCapability(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    path: str | None = None
+    query: str | None = None
+
+    @model_validator(mode="after")
+    def _one_bounded_target(self) -> "EvidenceCapability":
+        if self.kind == "bounded_read" and bool(self.path) and self.query is None:
+            return self
+        if self.kind == "bounded_search" and bool(self.query) and self.path is None:
+            return self
+        raise ValueError("capability must be one bounded_read path or bounded_search query")
+
+
+class SanityDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
+    reason: str
+    capability: EvidenceCapability | None = None
+
+    @model_validator(mode="after")
+    def _valid_status(self) -> "SanityDecision":
+        if self.status not in {"PROCEED", "NEEDS_EVIDENCE", "BLOCKED"}:
+            raise ValueError("invalid sanity status")
+        if (self.status == "NEEDS_EVIDENCE") != (self.capability is not None):
+            raise ValueError("only NEEDS_EVIDENCE supplies one capability")
+        return self
 
 
 class ReadResult(BaseModel):
@@ -369,6 +403,12 @@ class EventLedger:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.sequence = len(self.path.read_text(encoding="utf-8").splitlines()) if self.path.exists() else 0
+
+    def records(self, events: set[str] | None = None) -> list[dict[str, Any]]:
+        if not self.path.exists():
+            return []
+        records = [json.loads(line) for line in self.path.read_text(encoding="utf-8").splitlines()]
+        return [record for record in records if events is None or record["event"] in events]
 
     def append(self, event: str, payload: dict[str, Any]) -> int:
         self.sequence += 1
@@ -660,6 +700,15 @@ class InvestigateMissionSignature(dspy.Signature):
     category: str = dspy.OutputField()
 
 
+class EvidenceSanitySignature(dspy.Signature):
+    """Return one evidence sufficiency decision; never propose or invoke tools."""
+
+    packet: str = dspy.InputField()
+    status: str = dspy.OutputField()
+    reason: str = dspy.OutputField()
+    capability: EvidenceCapability | None = dspy.OutputField()
+
+
 class ProposeEditsSignature(dspy.Signature):
     """Produce exact-hash test edits first and production edits second using only supplied evidence. Multiple same-file replacements are permitted only within one phase when non-overlapping, non-empty, and sharing the original full-file hash; cross-phase reuse is forbidden. When production introduces a new symbol, obtain assertion-level RED through an existing import/module/public API surface and do not import the not-yet-created production symbol in the test-only phase. An expected-error/rejection test must fail if the expected error is absent and its failing path must include the exact mission Expected RED text: use pytest.raises(match=Expected RED text) or an explicit failure message containing it. Do not rely on an assertion after the context manager because it is unreachable when no exception occurs; silent try/except fallthrough is forbidden. Every identifier introduced by an edit must be bound by an existing or proposed matching import before use; match import form (`from package import name` uses `name`, while `import package` uses `package.name`), keep imports at module top, and prevent collection-time NameError or unbound decorator references. Before proposing an import, inspect and reuse existing module-top bindings; never add a function-local import for a name already bound at module scope, especially after earlier use in that function, because it shadows the entire local scope. Any pytest-provided identifier must be declared in test function fixture parameters (or explicitly constructed); never use an undeclared fixture name. Reserve pytest.raises for contracts that actually raise. If a mission or public contract returns a failure status/object, call the existing public surface and assert the returned state; never expect a constructor/call exception instead."""
 
@@ -685,16 +734,18 @@ class PostGreenReviewSignature(dspy.Signature):
 InvestigationSource = Callable[[Mission], Investigation]
 ProposalSource = Callable[[Mission, Investigation], ChangeProposal]
 ReviewSource = Callable[[Mission, Investigation, ChangeProposal, str], PostGreenReview]
+SanitySource = Callable[[Mission, Investigation, dict[str, Any]], SanityDecision]
 
 
 class MiniSWEWorkflow:
-    def __init__(self, mission: Mission, run_root: Path | str, investigation_source: InvestigationSource | None = None, proposal_source: ProposalSource | None = None, review_source: ReviewSource | None = None):
+    def __init__(self, mission: Mission, run_root: Path | str, investigation_source: InvestigationSource | None = None, proposal_source: ProposalSource | None = None, review_source: ReviewSource | None = None, sanity_source: SanitySource | None = None):
         self.mission = mission
         self.repo_root = Path(mission.repo_root).resolve()
         self.run_root = Path(run_root).resolve()
         self.investigation_source = investigation_source
         self.proposal_source = proposal_source
         self.review_source = review_source
+        self.sanity_source = sanity_source
         self.live_configured = False
 
     def _run_directory(self) -> Path:
@@ -792,6 +843,11 @@ class MiniSWEWorkflow:
             records.append({"path": path, "sha256": sha256_text(content), "content": content})
         return json.dumps(records, sort_keys=True)
 
+    def _live_sanity(self, packet: dict[str, Any]) -> SanityDecision:
+        self._configure_live()
+        prediction = dspy.Predict(EvidenceSanitySignature)(packet=json.dumps(packet, sort_keys=True))
+        return SanityDecision(status=str(prediction.status), reason=str(prediction.reason), capability=prediction.capability)
+
     def _live_proposal(self, investigation: Investigation) -> ChangeProposal:
         self._configure_live()
         prediction = dspy.Predict(ProposeEditsSignature)(
@@ -811,6 +867,62 @@ class MiniSWEWorkflow:
             verification_evidence=evidence,
         )
         return PostGreenReview(judgment=str(prediction.judgment), concerns=list(prediction.concerns), evidence_requests=list(prediction.evidence_requests))
+
+    def _evidence_packet(self, investigation: Investigation, ledger: EventLedger) -> dict[str, Any]:
+        evidence = json.loads(self._repository_evidence())
+        investigator_trace = ledger.records({"tool", "tool_error", "react_trajectory"})
+        return _redact({
+            "mission_boundary": {"goal": self.mission.goal, "allowed_paths": self.mission.allowed_paths},
+            "investigation": investigation.model_dump(mode="json"),
+            "investigator_trace": investigator_trace,
+            "repository_evidence": evidence,
+            "reviewed_learning": self.mission.reviewed_learning,
+        })
+
+    def _preview(self, grouped: GroupedProposal, allowed_commands: list[list[str]], acceptance_argv: list[str] | None, ruff_argv: list[str] | None) -> tuple[bool, str, dict[str, Any]]:
+        transcript: list[dict[str, Any]] = []
+        ignored = set(_IGNORED_SNAPSHOT_PARTS)
+        with tempfile.TemporaryDirectory(prefix="mini-swe-preview-") as directory:
+            copy_root = Path(directory) / "workspace"
+            shutil.copytree(self.repo_root, copy_root, ignore=lambda _root, names: {name for name in names if name in ignored or name == ".env" or name.startswith(".env.")})
+
+            def copied(group: GroupedEdit) -> GroupedEdit:
+                target = resolve_repo_file(copy_root, group.path)
+                return GroupedEdit(group.path, target, group.before_bytes, group.after_bytes, group.mode, group.before_sha256, group.after_sha256)
+
+            def command(phase: str, argv: list[str]) -> tuple[CommandResult, set[str]]:
+                before = _snapshot_workspace(copy_root)
+                real_before = _snapshot_workspace(self.repo_root)
+                result = run_allowed_command(argv, copy_root, allowed_commands, self.mission.timeout_seconds, self.repo_root)
+                copy_changed = _changed_paths(before, _snapshot_workspace(copy_root))
+                real_changed = _changed_paths(real_before, _snapshot_workspace(self.repo_root))
+                changed = copy_changed | real_changed
+                transcript.append({"phase": phase, "result": result.model_dump(mode="json"), "changed_paths": sorted(changed), "real_changed_paths": sorted(real_changed)})
+                return result, changed
+
+            try:
+                for group in grouped.test_groups:
+                    apply_grouped_edit(copied(group))
+                red, changed = command("focused_red", self.mission.focused_test_argv)
+                if changed or not (red.allowed and not red.timed_out and red.returncode == self.mission.expected_red_returncode and self.mission.expected_red_text in f"{red.stdout}\n{red.stderr}"):
+                    return False, "PREVIEW_COMMAND_MUTATION" if changed else "PREVIEW_RED_NOT_CONFIRMED", {"transcript": transcript}
+                if not grouped.production_groups:
+                    return False, "INVALID_PROPOSAL", {"transcript": transcript}
+                for group in grouped.production_groups:
+                    apply_grouped_edit(copied(group))
+                for phase, argv in (("focused_green", self.mission.focused_test_argv), ("full_green", self.mission.full_test_argv)):
+                    result, changed = command(phase, argv)
+                    if changed or not (result.allowed and not result.timed_out and result.returncode == 0):
+                        return False, "PREVIEW_COMMAND_MUTATION" if changed else f"PREVIEW_{phase.upper()}_FAILED", {"transcript": transcript}
+                for phase, argv in (("candidate_ruff", ruff_argv), ("acceptance_candidate", acceptance_argv)):
+                    if argv is None:
+                        continue
+                    result, changed = command(phase, argv)
+                    if changed or not (result.allowed and not result.timed_out and result.returncode == 0):
+                        return False, "PREVIEW_COMMAND_MUTATION" if changed else f"PREVIEW_{phase.upper()}_FAILED", {"transcript": transcript}
+            except (EditValidationError, ScopeViolation) as error:
+                return False, "PREVIEW_EDIT_INVALID", {"error": repr(error), "transcript": transcript}
+        return True, "", {"transcript": transcript}
 
     def _blocked(self, ledger: EventLedger, run_directory: Path, reason: str, preimages: dict[str, tuple[bytes, int]] | None, details: dict[str, Any] | None = None) -> RunResult:
         rollback = bool(preimages)
@@ -913,6 +1025,32 @@ class MiniSWEWorkflow:
             self._stage_end(ledger, "investigation", {"category": investigation.category})
             ledger.append("transition", {"from": WorkflowState.PREFLIGHT, "to": WorkflowState.INVESTIGATED, "reason": "investigation persisted"})
 
+            packet = self._evidence_packet(investigation, ledger)
+            packet_json = json.dumps(packet, sort_keys=True)
+            ledger.append("sanity_packet", {"sha256": sha256_text(packet_json), "packet": packet})
+            self._stage_start(ledger, "sanity")
+            try:
+                decision = self.sanity_source(self.mission, investigation, packet) if self.sanity_source else (SanityDecision(status="PROCEED", reason="injected sources require no live sanity") if self.investigation_source else self._live_sanity(packet))
+            except Exception as error:
+                self._stage_error(ledger, "sanity", error)
+                return self._blocked(ledger, run_directory, "INVALID_SANITY", None, {"error": repr(error)})
+            if not isinstance(decision, SanityDecision):
+                return self._blocked(ledger, run_directory, "INVALID_SANITY", None)
+            ledger.append("sanity", {"decision": decision.model_dump(mode="json")})
+            if decision.status == "BLOCKED":
+                return self._blocked(ledger, run_directory, "SANITY_BLOCKED", None, {"reason": decision.reason})
+            if decision.status == "NEEDS_EVIDENCE":
+                try:
+                    follow_up = bounded_read(self.repo_root, decision.capability.path) if decision.capability and decision.capability.kind == "bounded_read" else bounded_search(self.repo_root, decision.capability.query) if decision.capability else None
+                    if follow_up is None or follow_up.truncated:
+                        return self._blocked(ledger, run_directory, "NEEDS_EVIDENCE_BLOCKED", None)
+                except Exception as error:
+                    return self._blocked(ledger, run_directory, "NEEDS_EVIDENCE_BLOCKED", None, {"error": repr(error)})
+                follow_up_data = follow_up.model_dump(mode="json")
+                packet["follow_up"] = follow_up_data
+                ledger.append("evidence_follow_up", {"sha256": sha256_text(json.dumps(follow_up_data, sort_keys=True)), "result": follow_up_data})
+            self._stage_end(ledger, "sanity", {"status": decision.status})
+
             self._stage_start(ledger, "proposal")
             try:
                 proposal = self.proposal_source(self.mission, investigation) if self.proposal_source else self._live_proposal(investigation)
@@ -928,7 +1066,14 @@ class MiniSWEWorkflow:
                 ledger.append("proposal_invalid", {"path": error.path, "error": str(error)})
                 return self._blocked(ledger, run_directory, "INVALID_PROPOSAL", None, {"path": error.path, "error": str(error)})
             ledger.append("proposal_validated", {"test_paths": [group.path for group in grouped_proposal.test_groups], "production_paths": [group.path for group in grouped_proposal.production_groups]})
-            ledger.append("proposal", {"origin": "injected" if self.proposal_source else "live-predict", "output": proposal})
+            proposal_hash = sha256_text(json.dumps(proposal.model_dump(mode="json"), sort_keys=True))
+            preview_ok, preview_reason, preview_details = self._preview(grouped_proposal, allowed_commands, acceptance_argv, ruff_argv)
+            preview_payload = {"sha256": sha256_text(json.dumps(preview_details, sort_keys=True)), "proposal_sha256": proposal_hash, "passed": preview_ok, **preview_details}
+            ledger.append("preview", preview_payload)
+            if not preview_ok:
+                real_escape = any(item.get("real_changed_paths") for item in preview_details.get("transcript", []))
+                return self._blocked(ledger, run_directory, preview_reason, preimages if real_escape else None, preview_payload)
+            ledger.append("proposal", {"origin": "injected" if self.proposal_source else "live-predict", "sha256": proposal_hash, "output": proposal})
             self._stage_end(ledger, "proposal", {"test_edit_count": len(proposal.test_edits), "production_edit_count": len(proposal.production_edits), "test_group_count": len(grouped_proposal.test_groups), "production_group_count": len(grouped_proposal.production_groups)})
             ledger.append("transition", {"from": WorkflowState.INVESTIGATED, "to": WorkflowState.PROPOSED, "reason": "typed proposal validated"})
 
