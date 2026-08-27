@@ -275,7 +275,11 @@ map above and from the historical read-only verdicts in §7.
   binding guidance already covers it. Protected oracle SHA remains
   `7c2cfbc1eb22ac9b55a9d0f2d53bbd43b124916257f89ef15805152db68d0aa9`.
   Autonomous G10 retries are paused. G10 remains open, unimplemented, and unauthorized;
-  next progress requires a different execution strategy, not another prompt retry.
+  next progress requires a different execution strategy, not another prompt retry. One V1 run
+  at `2336bb3` produced trace SHA
+  `c99b3037b0c522eed259eecdd7c9fef4fe61b75b8e717bbed69685ee4ecd099d` and terminal
+  `BLOCKED / INVALID_SANITY`: the model emitted status `success`, outside
+  `PROCEED|NEEDS_EVIDENCE|BLOCKED`. No proposal, edit, rollback, or retry occurred; G10 remains open.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in
