@@ -232,7 +232,17 @@ map above and from the historical read-only verdicts in §7.
   `cd0f8bec2ab852389addf02fb32fd3f3139bb80a6f70df1a582a2fe4c8e64767`, emitted one
   Optional-import candidate rejected as redundant because existing tested generic
   module-top import-binding guidance already covers it. This is guidance only; G10 is
-  not implemented, rerun, accepted, or closed, and no reauthorization exists.
+  not implemented, rerun, accepted, or closed, and no reauthorization exists. A third
+  no-retry G10 run BLOCKED `RED_NOT_CONFIRMED` at terminal sequence 36: trace SHA
+  `af51e6a40e9cf108687a654c255f7859663fba717c99de7e3554e2713f7ff30f`.
+  Sequence 32 raised `NameError: monkeypatch is not defined`; rollback was clean, and
+  although its proposal otherwise used first-class return semantics, production was not
+  applied. Learner manifest SHA `7e56680aa376f486b01c4465918e67ac57e75cbdb9bb615119d3f6a165e4b08c`
+  and candidates SHA `708eb5eb67fa3fa52a1d2db542a22c5d908a70486eb1d9c0652eb8c0ab9519b6`
+  emitted one candidate accepted with generalization: any pytest-provided identifier
+  must be a declared fixture parameter or explicitly constructed; never use an
+  undeclared fixture name. This is guidance only; G10 remains open with no
+  reauthorization.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in

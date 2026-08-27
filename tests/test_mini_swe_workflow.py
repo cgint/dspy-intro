@@ -932,6 +932,14 @@ def test_real_g10_mission_binds_unresolved_proposal_failure_oracle_contract():
     assert mission.ruff_check_argv == [str(root / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "src/workflow/schemas.py", "src/workflow/flow.py", "tests/test_workflow.py"]
 
 
+def test_proposal_guidance_requires_pytest_fixture_bindings():
+    runner = runner_module()
+    guidance = runner.ProposeEditsSignature.__doc__ or ""
+    assert "pytest-provided identifier" in guidance
+    assert "fixture parameters" in guidance
+    assert "undeclared fixture name" in guidance
+
+
 def test_proposal_guidance_prevents_local_import_shadowing():
     runner = runner_module()
     guidance = runner.ProposeEditsSignature.__doc__ or ""
