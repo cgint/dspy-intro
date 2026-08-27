@@ -253,7 +253,18 @@ map above and from the historical read-only verdicts in §7.
   to the protected returned-state contract. Independently accepted guidance: reserve
   `pytest.raises` for contracts that raise; for public returned failure statuses or
   objects, call the surface and assert returned state. This is guidance only; G10
-  remains open with no reauthorization.
+  remains open with no reauthorization. A subsequent mechanically DONE G10 run is
+  independently rejected: trace SHA
+  `3c12cd5a5f673e1ff1d577865a407ed626382070aa293095ee5200851d38e000`, terminal
+  sequence 61, accepted binding
+  `13ecd3c29a82d25ca5464e902b91bb9ceb44b6562931a15211622ca5ce34e978` reproduced
+  focused7/full71/Ruff/protected2 green, but its resolved branch replaced raw
+  `certainty_score=None` with invented `0`, violating the no-fabricated-judgement
+  rule. The candidate product paths were restored cleanly. Learner manifest SHA
+  `38c36923769ff9edbcc07656dce22fb8518f01901bd5cac139bf8ce50079af60` produced zero
+  candidates (SHA `37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570`).
+  Protected acceptance now rejects calibrated success without a real score; G10 remains
+  open with no reauthorization.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in

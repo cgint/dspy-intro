@@ -11,10 +11,10 @@ def proposal(pid):
     return Proposal(proposal_id=pid, category="race-condition", target_symbol="x", failing_scenario="x", code_evidence="x", suggested_revision="x")
 
 
-def run(ledger, adopted, rejected, score=4):
+def run(ledger, adopted, rejected, score=4, status="reconciled-and-calibrated"):
     inquiry = InquiryRecord(inquiry_id="I", raw_question="q", operational_context="c")
     baseline = PrimaryBaseline(inquiry_id="I", call_tree=CallTree(entry_point="x"), git_archeology=GitArcheology(relevant_commits=["a"], author_intent_summary="a", intent_vs_code_gap="a"), baseline_summary="b")
-    verdict = ReconciledVerdict(inquiry_id="I", adopted_proposals=adopted, rejected_proposals=rejected, certainty_score=score, plain_language_verdict="v", actionable_decision_matrix="a")
+    verdict = ReconciledVerdict(inquiry_id="I", status=status, adopted_proposals=adopted, rejected_proposals=rejected, certainty_score=score, plain_language_verdict="v", actionable_decision_matrix="a")
     wf = CodeGroundingWorkflow()
     wf.ingress = lambda **_: SimpleNamespace(inquiry=inquiry)
     wf.discovery = lambda **_: SimpleNamespace(baseline=baseline)
@@ -41,6 +41,15 @@ def assert_pairing_rejected(**values):
         ReconciledVerdict(**values)
     except ValidationError as error:
         assert "G10_FAILURE_STATUS_CERTAINTY_PAIRING" in str(error)
+    else:
+        pytest.fail("G10_FAILURE_STATUS_CERTAINTY_PAIRING")
+
+
+def test_public_workflow_does_not_invent_certainty_for_resolved_ledger():
+    try:
+        run(ProposalLedger(inquiry_id="I"), [], [], score=None, status="reconciled-and-calibrated")
+    except ValidationError as error:
+        assert "G10_FAILURE_STATUS_CERTAINTY_PAIRING" in str(error), "G10_FAILURE_STATUS_CERTAINTY_PAIRING"
     else:
         pytest.fail("G10_FAILURE_STATUS_CERTAINTY_PAIRING")
 
