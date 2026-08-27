@@ -242,7 +242,18 @@ map above and from the historical read-only verdicts in §7.
   emitted one candidate accepted with generalization: any pytest-provided identifier
   must be a declared fixture parameter or explicitly constructed; never use an
   undeclared fixture name. This is guidance only; G10 remains open with no
-  reauthorization.
+  reauthorization. A fourth no-retry G10 run confirmed RED at sequence 34 but
+  BLOCKED `FOCUSED_GREEN_FAILED` at terminal sequence 47: trace SHA
+  `b4b02f3e0c79acfa7c6d7d8d94c0b2bdb92a72db18c5897890668059e80f8eca`.
+  Candidate production returned the required failure state, but its test expected valid
+  failure-state construction to raise; rollback was clean. Learner manifest SHA
+  `f202d8cd65cb559e86eee6f9c5b344172969dc6d2bb05d23f4ee77490143bce3` and candidates
+  SHA `b8d360c4bf43eaf99ad4b6807ac9639fbcc0e0f306382b5541d2c695b3db6028` emitted a
+  candidate rejected as contradictory because it retained ValueError framing contrary
+  to the protected returned-state contract. Independently accepted guidance: reserve
+  `pytest.raises` for contracts that raise; for public returned failure statuses or
+  objects, call the surface and assert returned state. This is guidance only; G10
+  remains open with no reauthorization.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in

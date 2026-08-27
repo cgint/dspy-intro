@@ -932,6 +932,14 @@ def test_real_g10_mission_binds_unresolved_proposal_failure_oracle_contract():
     assert mission.ruff_check_argv == [str(root / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "src/workflow/schemas.py", "src/workflow/flow.py", "tests/test_workflow.py"]
 
 
+def test_proposal_guidance_distinguishes_returned_failure_states():
+    runner = runner_module()
+    guidance = runner.ProposeEditsSignature.__doc__ or ""
+    assert "Reserve pytest.raises for contracts that actually raise" in guidance
+    assert "assert the returned state" in guidance
+    assert "constructor/call exception" in guidance
+
+
 def test_proposal_guidance_requires_pytest_fixture_bindings():
     runner = runner_module()
     guidance = runner.ProposeEditsSignature.__doc__ or ""
