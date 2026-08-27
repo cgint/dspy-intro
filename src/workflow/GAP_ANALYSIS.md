@@ -212,8 +212,17 @@ map above and from the historical read-only verdicts in §7.
   `src/workflow/mini-swe-acceptance/G10-unresolved-proposal-failure.py`. The original
   `cdf4d01` annotation-only oracle is rejected before live use as schema theatre;
   its behavioral public-flow replacement is baseline-proven at pytest rc1 with
-  `G10_UNRESOLVED_PROPOSAL_FAILURE` and pins its hash in readiness. G10 is not
-  implemented, run, accepted, or closed.
+  `G10_UNRESOLVED_PROPOSAL_FAILURE` and pins its hash in readiness. A later no-retry
+  G10 run BLOCKED `RED_NOT_CONFIRMED` at sequence 36: trace SHA
+  `a18e523392b08c92f31d15c414719c00405db520fc4c72e7586b17aeb2c8bf7e`; its proposal
+  inserted a function-local `Proposal`/`ProposalLedger` import after earlier `Proposal`
+  use, causing `UnboundLocalError`, and rollback was clean. Learner manifest SHA
+  `860250d2db54a890045596655ebfd17e7b6be8e66c3e0c63c889fce4395767c8` and candidates
+  SHA `b24e98d3932adb3088ea8b14c6ef961358d0365eab84b81bb9d8918329184014` yielded one
+  candidate accepted with revision: inspect/reuse existing module-top bindings and
+  never add a function-local import for an existing module-scope name, which shadows
+  the entire local scope. This is guidance only; G10 is not implemented, rerun,
+  accepted, or closed.
 - **G5 closed/committed.** Commit `6c38160` replaces free-text
   `git_intent_summary` with required structured `git_archeology` in
   `src/workflow/schemas.py` and migrates both existing fixtures in

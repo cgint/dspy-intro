@@ -932,6 +932,14 @@ def test_real_g10_mission_binds_unresolved_proposal_failure_oracle_contract():
     assert mission.ruff_check_argv == [str(root / ".venv/bin/python"), "-m", "ruff", "check", "--no-cache", "src/workflow/schemas.py", "src/workflow/flow.py", "tests/test_workflow.py"]
 
 
+def test_proposal_guidance_prevents_local_import_shadowing():
+    runner = runner_module()
+    guidance = runner.ProposeEditsSignature.__doc__ or ""
+    assert "reuse existing module-top bindings" in guidance
+    assert "function-local import" in guidance
+    assert "shadows the entire local scope" in guidance
+
+
 def test_proposal_guidance_requires_import_bindings_before_use():
     runner = runner_module()
     guidance = runner.ProposeEditsSignature.__doc__ or ""
