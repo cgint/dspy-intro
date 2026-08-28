@@ -1316,3 +1316,235 @@ def test_command_mutation_audit_candidate_rollback_order_and_residual_outside_fi
     assert preview["payload"]["transcript"][-1]["real_changed_paths"] == ["outside.txt", "source.py"]
     assert not any(event["event"] == "command" and event["payload"]["phase"] == "candidate_ruff" for event in events)
     assert any(event["event"] == "rollback" for event in events)
+
+
+def _v2_delta(runner, repo: Path, trace: Path, phase: str = "focused_green") -> dict[str, object]:
+    proposal_hash = "a" * 64
+    preview_payload = {"passed": False, "transcript": [{"phase": phase, "result": {"stdout": "public failure", "stderr": ""}, "real_changed_paths": []}]}
+    records = [
+        {"sequence": 1, "event": "preflight", "payload": {"mission_id": "mission-test"}},
+        {"sequence": 2, "event": "preview", "payload": {"passed": False, "proposal_sha256": proposal_hash, "sha256": runner.sha256_text(json.dumps({"transcript": preview_payload["transcript"]}, sort_keys=True)), **preview_payload}},
+        {"sequence": 3, "event": "terminal", "payload": {"state": "BLOCKED", "reason": "PREVIEW_FOCUSED_GREEN_FAILED"}},
+    ]
+    trace.write_text("".join(json.dumps(record) + "\n" for record in records))
+    return {
+        "failure_reference": {"source_trace_path": str(trace), "source_trace_sha256": runner.sha256_bytes(trace.read_bytes()), "source_mission_id": "mission-test", "terminal_sequence": 3, "prior_proposal_sha256": proposal_hash, "preview_payload_sha256": records[1]["payload"]["sha256"], "failed_phase": phase, "terminal_reason": "PREVIEW_FOCUSED_GREEN_FAILED"},
+        "coordinator_judgement": {"changed_premise": "The public failure falsifies the original premise.", "next_strategy": "Inspect the public contract before proposing once.", "public_evidence": [{"path": "source.py", "sha256": runner.sha256_bytes((repo / "source.py").read_bytes()), "observation": "CallTree is the public source under investigation."}]},
+    }
+
+
+def test_v2_delta_models_forbid_extra_and_score_fields(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    trace = tmp_path / "prior.jsonl"
+    delta = _v2_delta(runner, repo, trace)
+    assert runner.LearningDelta.model_validate(delta).coordinator_judgement.next_strategy
+    with pytest.raises(ValidationError):
+        runner.LearningDelta.model_validate({**delta, "score": 1})
+    with pytest.raises(ValidationError):
+        runner.LearningDelta.model_validate({**delta, "coordinator_judgement": {**delta["coordinator_judgement"], "semantic_score": 1}})
+
+
+@pytest.mark.parametrize("mutation", ["trace_hash", "sequence", "phase", "protected", "stale", "outside", "raw"])
+def test_v2_admission_rejects_falsified_inputs_before_sources(tmp_path, mutation):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    trace = tmp_path / "prior.jsonl"
+    delta = _v2_delta(runner, repo, trace, "acceptance_candidate" if mutation == "protected" else "focused_green")
+    if mutation == "trace_hash":
+        delta["failure_reference"]["source_trace_sha256"] = "0" * 64
+    elif mutation == "sequence":
+        delta["failure_reference"]["terminal_sequence"] = 2
+    elif mutation == "phase":
+        delta["failure_reference"]["failed_phase"] = "full_green"
+    elif mutation == "stale":
+        delta["coordinator_judgement"]["public_evidence"][0]["sha256"] = "0" * 64
+    elif mutation == "outside":
+        delta["coordinator_judgement"]["public_evidence"][0]["path"] = "outside.py"
+    delta_path = tmp_path / "delta.json"
+    delta_path.write_text(json.dumps(delta))
+    mission = make_mission(runner, repo).model_copy(update={"learning_delta_file": str(delta_path), "reviewed_learning": ["raw"] if mutation == "raw" else []})
+    before = trace.read_bytes()
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs", investigation_source=lambda _m: pytest.fail("investigator called"), proposal_source=lambda _m, _i: pytest.fail("proposer called")).run()
+    assert result.status is runner.TerminalStatus.BLOCKED
+    assert trace.read_bytes() == before
+    events = [json.loads(line) for line in result.ledger_path.read_text().splitlines()]
+    assert not any(event["event"] == "learning_delta_admitted" for event in events)
+
+
+def test_v2_admission_orders_event_and_carries_identical_safe_view(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    trace = tmp_path / "prior.jsonl"
+    delta_path = tmp_path / "delta.json"
+    delta_path.write_text(json.dumps(_v2_delta(runner, repo, trace)))
+    seen: dict[str, object] = {"proposals": 0}
+    mission = make_mission(runner, repo).model_copy(update={"learning_delta_file": str(delta_path)})
+    def investigate(current):
+        seen["investigation"] = current.learning_context
+        return runner.Investigation(facts=[], category="test")
+    def propose(current, _investigation):
+        seen["proposals"] += 1
+        seen["proposal"] = current.learning_context
+        return successful_proposal(runner, repo)
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs", investigation_source=investigate, proposal_source=propose, review_source=lambda *_args: runner.PostGreenReview(judgment="ok", concerns=[], evidence_requests=[])).run()
+    assert result.status is runner.TerminalStatus.DONE
+    events = [json.loads(line) for line in result.ledger_path.read_text().splitlines()]
+    admitted = next(event for event in events if event["event"] == "learning_delta_admitted")
+    packet = next(event["payload"]["packet"] for event in events if event["event"] == "proposal_packet")
+    assert events.index(admitted) < next(index for index, event in enumerate(events) if event["event"] == "stage_start" and event["payload"]["stage"] == "investigation")
+    assert seen["proposals"] == 1
+    assert seen["investigation"] == seen["proposal"] == packet["learning_context"]
+    assert str(trace) not in json.dumps(packet)
+
+
+def test_v2_safe_output_excerpt_has_visible_truncation_and_hashes(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    trace = tmp_path / "prior.jsonl"
+    delta = _v2_delta(runner, repo, trace)
+    records = [json.loads(line) for line in trace.read_text().splitlines()]
+    output = "x" * 2001
+    records[1]["payload"]["transcript"][0]["result"]["stdout"] = output
+    preview_hash = runner.sha256_text(json.dumps({"transcript": records[1]["payload"]["transcript"]}, sort_keys=True))
+    records[1]["payload"]["sha256"] = preview_hash
+    trace.write_text("".join(json.dumps(record) + "\n" for record in records))
+    delta["failure_reference"]["preview_payload_sha256"] = preview_hash
+    delta["failure_reference"]["source_trace_sha256"] = runner.sha256_bytes(trace.read_bytes())
+    delta_path = tmp_path / "delta.json"
+    delta_path.write_text(json.dumps(delta))
+    seen: dict[str, object] = {}
+    def investigate(mission):
+        seen["safe_view"] = mission.learning_context
+        return runner.Investigation(facts=[], category="test")
+    result = runner.MiniSWEWorkflow(make_mission(runner, repo).model_copy(update={"learning_delta_file": str(delta_path)}), tmp_path / "runs", investigation_source=investigate, proposal_source=lambda _m, _i: successful_proposal(runner, repo), review_source=lambda *_args: runner.PostGreenReview(judgment="ok", concerns=[], evidence_requests=[])).run()
+    assert result.status is runner.TerminalStatus.DONE
+    failure = seen["safe_view"]["failure"]
+    assert failure["failed_command_excerpt"] == output[:2000]
+    assert failure["excerpt_truncated"] is True
+    assert failure["full_redacted_output_sha256"] == runner.sha256_text(f"{output}\n")
+    admitted = next(json.loads(line) for line in result.ledger_path.read_text().splitlines() if json.loads(line)["event"] == "learning_delta_admitted")
+    assert admitted["payload"]["safe_view_sha256"] == runner.sha256_text(json.dumps(seen["safe_view"], sort_keys=True))
+
+
+def test_v2_malformed_delta_file_blocks_before_sources_and_admission(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    delta_path = tmp_path / "malformed-delta.json"
+    delta_path.write_text("{malformed")
+    mission = make_mission(runner, repo).model_copy(update={"learning_delta_file": str(delta_path)})
+    result = runner.MiniSWEWorkflow(mission, tmp_path / "runs", investigation_source=lambda _m: pytest.fail("investigator called"), proposal_source=lambda _m, _i: pytest.fail("proposer called")).run()
+    assert result.status is runner.TerminalStatus.BLOCKED
+    events = [json.loads(line) for line in result.ledger_path.read_text().splitlines()]
+    assert not any(event["event"] == "learning_delta_admitted" for event in events)
+
+
+@pytest.mark.parametrize("falsification", ["malformed", "nonterminal", "nonmonotonic", "source_symlink", "mission", "proposal", "preview_hash", "reason", "passed", "real_escape", "multiple_preview", "final_item", "unknown_phase"])
+def test_v2_admission_falsifies_frozen_trace_contract(tmp_path, falsification):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    trace = tmp_path / "prior.jsonl"
+    delta = _v2_delta(runner, repo, trace)
+    records = [json.loads(line) for line in trace.read_text().splitlines()]
+    if falsification == "malformed":
+        trace.write_text("{not-json}\n")
+    elif falsification == "nonterminal":
+        records[-1]["event"] = "review"
+    elif falsification == "nonmonotonic":
+        records[1]["sequence"] = 1
+    elif falsification == "source_symlink":
+        target = tmp_path / "trace-target.jsonl"
+        target.write_bytes(trace.read_bytes())
+        trace.unlink()
+        trace.symlink_to(target)
+    elif falsification == "mission":
+        records[0]["payload"]["mission_id"] = "wrong"
+    elif falsification == "proposal":
+        records[1]["payload"]["proposal_sha256"] = "b" * 64
+    elif falsification == "preview_hash":
+        records[1]["payload"]["sha256"] = "b" * 64
+        delta["failure_reference"]["preview_payload_sha256"] = "b" * 64
+    elif falsification == "reason":
+        records[-1]["payload"]["reason"] = "PREVIEW_COMMAND_MUTATION"
+        delta["failure_reference"]["terminal_reason"] = "PREVIEW_COMMAND_MUTATION"
+    elif falsification == "passed":
+        records[1]["payload"]["passed"] = True
+    elif falsification == "real_escape":
+        records[1]["payload"]["transcript"][0]["real_changed_paths"] = ["source.py"]
+    elif falsification == "multiple_preview":
+        records.insert(2, {**records[1], "sequence": 3})
+        records[-1]["sequence"] = 4
+        delta["failure_reference"]["terminal_sequence"] = 4
+    elif falsification == "final_item":
+        records[1]["payload"]["transcript"].append({"phase": "full_green", "result": {}, "real_changed_paths": []})
+        preview_hash = runner.sha256_text(json.dumps({"transcript": records[1]["payload"]["transcript"]}, sort_keys=True))
+        records[1]["payload"]["sha256"] = preview_hash
+        delta["failure_reference"]["preview_payload_sha256"] = preview_hash
+    elif falsification == "unknown_phase":
+        records[1]["payload"]["transcript"][0]["phase"] = "unknown_phase"
+        delta["failure_reference"]["failed_phase"] = "unknown_phase"
+    if falsification not in {"malformed", "source_symlink"}:
+        trace.write_text("".join(json.dumps(record) + "\n" for record in records))
+    if falsification not in {"source_symlink"}:
+        delta["failure_reference"]["source_trace_sha256"] = runner.sha256_bytes(trace.read_bytes())
+    mission = make_mission(runner, repo).model_copy(update={"learning_delta": runner.LearningDelta.model_validate(delta)})
+    with pytest.raises(runner.LearningAdmissionError):
+        runner._admit_learning_delta(mission)
+
+
+def test_v2_runtime_typed_and_file_ambiguity_and_lowercase_hashes(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    trace = tmp_path / "prior.jsonl"
+    delta = _v2_delta(runner, repo, trace)
+    delta_path = tmp_path / "delta.json"
+    delta_path.write_text(json.dumps(delta))
+    mission = make_mission(runner, repo).model_copy(update={"learning_delta": runner.LearningDelta.model_validate(delta), "learning_delta_file": str(delta_path)})
+    with pytest.raises(runner.LearningAdmissionError):
+        runner._admit_learning_delta(mission)
+    delta["failure_reference"]["source_trace_sha256"] = "A" * 64
+    with pytest.raises(ValidationError):
+        runner.LearningDelta.model_validate(delta)
+
+
+def test_v2_admission_blocks_in_place_source_drift_and_live_input_omits_trace_path(tmp_path, monkeypatch):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    trace = tmp_path / "prior.jsonl"
+    delta = _v2_delta(runner, repo, trace)
+    mission = make_mission(runner, repo).model_copy(update={"learning_delta": runner.LearningDelta.model_validate(delta)})
+    original = runner._read_regular_file_once
+    reads = 0
+    def drift(path):
+        nonlocal reads
+        reads += 1
+        if reads == 2:
+            trace.write_text(trace.read_text() + "\n")
+        return original(path)
+    monkeypatch.setattr(runner, "_read_regular_file_once", drift)
+    with pytest.raises(runner.LearningAdmissionError, match="changed during admission"):
+        runner._admit_learning_delta(mission)
+
+    admitted = runner._admit_learning_delta(make_mission(runner, repo).model_copy(update={"learning_delta": runner.LearningDelta.model_validate(_v2_delta(runner, repo, trace))}))
+    assert admitted is not None
+    safe_view = admitted[1]
+    workflow = runner.MiniSWEWorkflow(make_mission(runner, repo).model_copy(update={"learning_context": safe_view}), tmp_path / "runs")
+    captured: dict[str, str] = {}
+    class FakeReAct:
+        def __init__(self, _signature, tools):
+            self.tools = tools
+        def __call__(self, **kwargs):
+            captured.update(kwargs)
+            return type("Prediction", (), {"facts": [], "category": "test"})()
+    monkeypatch.setattr(workflow, "_configure_live", lambda: None)
+    monkeypatch.setattr(runner.dspy, "ReAct", FakeReAct)
+    workflow._live_investigation(runner.EventLedger(tmp_path / "live-trace.jsonl"))
+    assert str(trace) not in captured["reviewed_learning"]
+
+
+def test_v2_cli_rejects_repeated_delta_file_flag(monkeypatch):
+    runner = runner_module()
+    monkeypatch.setattr(sys, "argv", ["runner", "--mission-file", "mission.json", "--repo-root", "repo", "--run-root", "runs", "--learning-delta-file", "one.json", "--learning-delta-file", "two.json"])
+    with pytest.raises(SystemExit) as error:
+        runner.main()
+    assert error.value.code == 2

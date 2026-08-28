@@ -32,3 +32,18 @@ V0 has no shell tool or model write tool, permits exact edits only to existing a
 V1 freezes mission-public investigation evidence and runs one sanity decision: `PROCEED`, `NEEDS_EVIDENCE`, or `BLOCKED`. Investigator reads/searches and the one optional follow-up are restricted to `allowed_paths`; protected acceptance artifacts and all other repository content are outside investigator and proposer input. After the optional follow-up, Python serializes one final immutable packet, records its SHA-256 as `proposal_packet`, and supplies those exact bytes to the one live proposer invocation.
 
 The normalized proposal is then previewed in a disposable copy before real-target edits. A failed preview blocks without retry, repair, or real-target mutation. A passing preview admits the same proposal to the unchanged V0 RED/GREEN/Ruff/protected-acceptance/review gates. V1 adds no shell, model write tool, cross-transaction learning, or semantic model authority.
+
+## V2 provenance-bound learning re-entry
+
+A coordinator may start one **new** invocation with one typed delta file:
+
+```sh
+.venv/bin/python src/mini-swe-wf/mini_swe_workflow.py \
+  --mission-file src/workflow/mini-swe-missions/G12-event-subscribers.json \
+  --repo-root "$PWD" --run-root /absolute/external/mini-swe-runs \
+  --learning-delta-file /absolute/path/to/learning-delta.json
+```
+
+The file contains strict `failure_reference` facts (frozen source-trace path and hash, mission/terminal/proposal/preview/phase/reason bindings) plus unscored `coordinator_judgement` strings and current hashes of cited public evidence. It is not mission JSON. The runner accepts one regular, non-symlink terminal `BLOCKED` trace whose cited failed phase is only `focused_red`, `focused_green`, `full_green`, or `candidate_ruff`; it rechecks public allow-list hashes and rejects malformed, stale, protected, unknown, or ambiguous inputs before any provider call. `--reviewed-learning` cannot accompany a typed delta.
+
+On admission, the new trace records one hash-bound `learning_delta_admitted` event before investigation. Only the bounded public safe view reaches investigation and the final proposal packet; it excludes the source-trace path and protected acceptance material. This is not retry, promotion, automatic successor execution, scoring, or G10 completion.

@@ -25,7 +25,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Literal
 
 import dspy
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 SRC_ROOT = Path(__file__).resolve().parents[1]
 if str(SRC_ROOT) not in sys.path:
@@ -90,12 +90,54 @@ class MissionSpec(BaseModel):
         return self
 
 
+_SHA256_PATTERN = r"^[0-9a-f]{64}$"
+
+
+class PreviewFailureReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_trace_path: str = Field(min_length=1)
+    source_trace_sha256: str = Field(pattern=_SHA256_PATTERN)
+    source_mission_id: str = Field(min_length=1)
+    terminal_sequence: int = Field(ge=1)
+    prior_proposal_sha256: str = Field(pattern=_SHA256_PATTERN)
+    preview_payload_sha256: str = Field(pattern=_SHA256_PATTERN)
+    failed_phase: str = Field(min_length=1)
+    terminal_reason: str = Field(min_length=1)
+
+
+class PublicEvidenceReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1)
+    sha256: str = Field(pattern=_SHA256_PATTERN)
+    observation: str = Field(min_length=1)
+
+
+class CoordinatorJudgement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    changed_premise: str = Field(min_length=1)
+    next_strategy: str = Field(min_length=1)
+    public_evidence: list[PublicEvidenceReference] = Field(min_length=1)
+
+
+class LearningDelta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    failure_reference: PreviewFailureReference
+    coordinator_judgement: CoordinatorJudgement
+
+
 class Mission(MissionSpec):
     model_config = ConfigDict(extra="forbid")
 
     repo_root: str = Field(min_length=1)
     model_name: str = "gemini/gemini-3.5-flash-lite"
     reviewed_learning: list[str] = Field(default_factory=list)
+    learning_delta: LearningDelta | None = Field(default=None, exclude=True)
+    learning_delta_file: str | None = Field(default=None, exclude=True)
+    learning_context: dict[str, Any] | None = Field(default=None, exclude=True)
     mission_provenance: str = "in-memory"
 
 
@@ -395,6 +437,124 @@ def _redact(value: Any, key: str | None = None) -> Any:
         for pattern in _SECRET_PATTERNS:
             value = pattern.sub(r"\1[REDACTED]", value)
     return value
+
+
+class LearningAdmissionError(ScopeViolation):
+    pass
+
+
+_LEARNING_PHASE_REASONS = {
+    "focused_red": "PREVIEW_RED_NOT_CONFIRMED",
+    "focused_green": "PREVIEW_FOCUSED_GREEN_FAILED",
+    "full_green": "PREVIEW_FULL_GREEN_FAILED",
+    "candidate_ruff": "PREVIEW_CANDIDATE_RUFF_FAILED",
+}
+
+
+def _read_regular_file_once(path: Path) -> tuple[bytes, tuple[int, int]]:
+    try:
+        identity = path.lstat()
+    except OSError as error:
+        raise LearningAdmissionError("Learning source trace is unavailable") from error
+    if path.is_symlink() or not stat.S_ISREG(identity.st_mode):
+        raise LearningAdmissionError("Learning source trace must be a regular non-symlink file")
+    try:
+        return path.read_bytes(), (identity.st_dev, identity.st_ino)
+    except OSError as error:
+        raise LearningAdmissionError("Learning source trace cannot be read") from error
+
+
+def _parse_frozen_trace(data: bytes) -> list[dict[str, Any]]:
+    try:
+        lines = data.decode("utf-8").splitlines()
+    except UnicodeDecodeError as error:
+        raise LearningAdmissionError("Learning source trace is not UTF-8 JSONL") from error
+    if not lines:
+        raise LearningAdmissionError("Learning source trace is empty")
+    records: list[dict[str, Any]] = []
+    previous = 0
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise LearningAdmissionError("Learning source trace is malformed JSONL") from error
+        sequence = record.get("sequence") if isinstance(record, dict) else None
+        if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence <= previous:
+            raise LearningAdmissionError("Learning source trace sequences must be unique ascending integers")
+        previous = sequence
+        records.append(record)
+    return records
+
+
+def _preview_details(payload: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in payload.items() if key not in {"sha256", "proposal_sha256", "passed"}}
+
+
+def _admit_learning_delta(mission: Mission) -> tuple[LearningDelta, dict[str, Any], dict[str, Any]] | None:
+    if mission.learning_delta is not None and mission.learning_delta_file is not None:
+        raise LearningAdmissionError("Only one typed learning delta is permitted")
+    if mission.learning_delta_file is not None:
+        try:
+            delta_bytes = Path(mission.learning_delta_file).read_bytes()
+            delta = LearningDelta.model_validate_json(delta_bytes)
+        except (OSError, ValueError, ValidationError) as error:
+            raise LearningAdmissionError("Learning delta file is invalid") from error
+        delta_sha256 = sha256_bytes(delta_bytes)
+    else:
+        delta = mission.learning_delta
+        if delta is None:
+            return None
+        delta_sha256 = sha256_text(json.dumps(delta.model_dump(mode="json"), sort_keys=True))
+    if mission.reviewed_learning:
+        raise LearningAdmissionError("Typed learning delta cannot coexist with reviewed_learning")
+    reference = delta.failure_reference
+    source = Path(reference.source_trace_path)
+    source_bytes, source_identity = _read_regular_file_once(source)
+    if sha256_bytes(source_bytes) != reference.source_trace_sha256:
+        raise LearningAdmissionError("Learning source trace hash mismatch")
+    records = _parse_frozen_trace(source_bytes)
+    terminal = records[-1]
+    if terminal.get("event") != "terminal" or terminal.get("sequence") != reference.terminal_sequence:
+        raise LearningAdmissionError("Learning source terminal binding mismatch")
+    terminal_payload = terminal.get("payload")
+    if not isinstance(terminal_payload, dict) or terminal_payload.get("state") != TerminalStatus.BLOCKED.value or terminal_payload.get("reason") != reference.terminal_reason:
+        raise LearningAdmissionError("Learning source terminal must be BLOCKED with the cited reason")
+    preflight = next((record for record in records if record.get("event") == "preflight"), None)
+    if not isinstance(preflight, dict) or not isinstance(preflight.get("payload"), dict) or preflight["payload"].get("mission_id") != reference.source_mission_id:
+        raise LearningAdmissionError("Learning source mission binding mismatch")
+    previews = [record for record in records if record.get("event") == "preview" and isinstance(record.get("payload"), dict)]
+    if len(previews) != 1:
+        raise LearningAdmissionError("Learning source must contain exactly one preview event")
+    payload = previews[0]["payload"]
+    transcript = payload.get("transcript")
+    if not isinstance(transcript, list) or not transcript:
+        raise LearningAdmissionError("Learning source preview transcript must be nonempty")
+    if payload.get("passed") is not False or payload.get("proposal_sha256") != reference.prior_proposal_sha256 or payload.get("sha256") != reference.preview_payload_sha256 or sha256_text(json.dumps(_preview_details(payload), sort_keys=True)) != reference.preview_payload_sha256:
+        raise LearningAdmissionError("Learning source preview binding mismatch")
+    if any(not isinstance(item, dict) or item.get("real_changed_paths") != [] for item in transcript):
+        raise LearningAdmissionError("Learning source preview recorded real-target changes")
+    failed = transcript[-1]
+    if failed.get("phase") != reference.failed_phase or reference.failed_phase not in _LEARNING_PHASE_REASONS:
+        raise LearningAdmissionError("Learning failed phase is protected or unavailable")
+    if reference.terminal_reason != _LEARNING_PHASE_REASONS[reference.failed_phase]:
+        raise LearningAdmissionError("Learning terminal reason is not the failed public phase reason")
+    evidence_view = []
+    for evidence in delta.coordinator_judgement.public_evidence:
+        target = _validate_allowed_file(mission.repo_root, mission.allowed_paths, evidence.path)
+        if sha256_bytes(target.read_bytes()) != evidence.sha256:
+            raise LearningAdmissionError("Learning public evidence hash is stale")
+        evidence_view.append(evidence.model_dump(mode="json"))
+    rechecked_bytes, current_identity = _read_regular_file_once(source)
+    if current_identity != source_identity or sha256_bytes(rechecked_bytes) != reference.source_trace_sha256:
+        raise LearningAdmissionError("Learning source trace changed during admission")
+    result = failed.get("result")
+    output = "" if not isinstance(result, dict) else f"{result.get('stdout', '')}\n{result.get('stderr', '')}"
+    full_redacted_output = _redact(output)
+    if not isinstance(full_redacted_output, str):
+        raise LearningAdmissionError("Learning source output redaction is invalid")
+    safe_view = _redact({"failure": {"failed_phase": reference.failed_phase, "terminal_reason": reference.terminal_reason, "prior_proposal_sha256": reference.prior_proposal_sha256, "preview_payload_sha256": reference.preview_payload_sha256, "failed_command_excerpt": full_redacted_output[:2000], "excerpt_truncated": len(full_redacted_output) > 2000, "full_redacted_output_sha256": sha256_text(full_redacted_output)}, "coordinator_judgement": {"changed_premise": delta.coordinator_judgement.changed_premise, "next_strategy": delta.coordinator_judgement.next_strategy, "public_evidence": evidence_view}})
+    admission = {"delta_sha256": delta_sha256, "delta": delta.model_dump(mode="json"), "source_trace_sha256": reference.source_trace_sha256, "safe_view_sha256": sha256_text(json.dumps(safe_view, sort_keys=True))}
+    return delta, safe_view, admission
 
 
 class EventLedger:
@@ -806,6 +966,7 @@ class MiniSWEWorkflow:
             "git_revision": _git_revision(self.repo_root),
             "allowed_paths": self.mission.allowed_paths,
             "reviewed_learning": self.mission.reviewed_learning,
+            "learning_delta_file": self.mission.learning_delta_file,
             "acceptance_artifact": acceptance_artifact,
         }
 
@@ -841,7 +1002,7 @@ class MiniSWEWorkflow:
         prediction = dspy.ReAct(InvestigateMissionSignature, tools=[read_repo_file, search_repo])(
             mission=self.mission.goal,
             allowed_paths=", ".join(self.mission.allowed_paths),
-            reviewed_learning=json.dumps(self.mission.reviewed_learning),
+            reviewed_learning=json.dumps({"reviewed_learning": self.mission.reviewed_learning, "learning_context": self.mission.learning_context}, sort_keys=True),
         )
         trajectory = getattr(prediction, "trajectory", None)
         if trajectory is not None:
@@ -888,6 +1049,7 @@ class MiniSWEWorkflow:
             "investigator_trace": investigator_trace,
             "repository_evidence": evidence,
             "reviewed_learning": self.mission.reviewed_learning,
+            "learning_context": self.mission.learning_context,
         })
 
     def _preview(self, grouped: GroupedProposal, allowed_commands: list[list[str]], acceptance_argv: list[str] | None, ruff_argv: list[str] | None) -> tuple[bool, str, dict[str, Any]]:
@@ -982,6 +1144,11 @@ class MiniSWEWorkflow:
             preflight = self._preflight()
             initial_revision = preflight["git_revision"]
             ledger.append("preflight", preflight)
+            admitted = _admit_learning_delta(self.mission)
+            if admitted is not None:
+                _delta, safe_view, admission = admitted
+                self.mission.learning_context = safe_view
+                ledger.append("learning_delta_admitted", admission)
             ledger.append("transition", {"from": None, "to": WorkflowState.PREFLIGHT, "reason": "preflight passed"})
             baseline_snapshot = _snapshot_workspace(self.repo_root)
             preimages = {path: (_validate_allowed_file(self.repo_root, self.mission.allowed_paths, path).read_bytes(), _validate_allowed_file(self.repo_root, self.mission.allowed_paths, path).stat().st_mode) for path in self.mission.allowed_paths}
@@ -1232,7 +1399,7 @@ class MiniSWEWorkflow:
             return self._blocked(ledger, run_directory, "UNHANDLED_ERROR", rollback_preimages(), {"error": repr(error)})
 
 
-def load_mission_file(path: Path | str, repo_root: Path | str, model_name: str, reviewed_learning: list[str] | None = None) -> Mission:
+def load_mission_file(path: Path | str, repo_root: Path | str, model_name: str, reviewed_learning: list[str] | None = None, learning_delta_file: Path | str | None = None) -> Mission:
     mission_path = Path(path).resolve(strict=True)
     raw = json.loads(mission_path.read_text(encoding="utf-8"))
     root = Path(repo_root).resolve()
@@ -1240,7 +1407,7 @@ def load_mission_file(path: Path | str, repo_root: Path | str, model_name: str, 
         if raw.get(command_key) is not None:
             raw[command_key] = [str(root / ".venv" / "bin" / "python") if item == "${REPO_VENV_PYTHON}" else item for item in raw[command_key]]
     spec = MissionSpec.model_validate(raw)
-    return Mission(**spec.model_dump(), repo_root=str(root), model_name=model_name, reviewed_learning=reviewed_learning or [], mission_provenance=str(mission_path))
+    return Mission(**spec.model_dump(), repo_root=str(root), model_name=model_name, reviewed_learning=reviewed_learning or [], learning_delta_file=str(learning_delta_file) if learning_delta_file else None, mission_provenance=str(mission_path))
 
 
 def main() -> int:
@@ -1250,8 +1417,11 @@ def main() -> int:
     parser.add_argument("--run-root", required=True, help="Durable external artifact root; never inside the mission repository.")
     parser.add_argument("--model", default="gemini/gemini-3.5-flash-lite")
     parser.add_argument("--reviewed-learning", action="append", default=[])
+    parser.add_argument("--learning-delta-file", action="append", default=[])
     args = parser.parse_args()
-    mission = load_mission_file(args.mission_file, args.repo_root, args.model, args.reviewed_learning)
+    if len(args.learning_delta_file) > 1:
+        parser.error("--learning-delta-file may be supplied at most once")
+    mission = load_mission_file(args.mission_file, args.repo_root, args.model, args.reviewed_learning, args.learning_delta_file[0] if args.learning_delta_file else None)
     result = MiniSWEWorkflow(mission, args.run_root).run()
     print(json.dumps({"status": result.status.value, "reason": result.reason, "ledger_path": str(result.ledger_path)}))
     return 0 if result.status is TerminalStatus.DONE else 2
