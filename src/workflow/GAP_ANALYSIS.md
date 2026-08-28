@@ -524,12 +524,33 @@ first — independence, durability, and the no-5/5 / inconclusive outcome — be
 those are what make the output *defensible to a PO*, and they are the parts a
 prompt-only pipeline cannot fake.
 
-### G10 V1 preview evidence (commit `2119d3c`)
+### G10 V1 preview evidence
 
-One protected V1 run, `G10-unresolved-proposal-failure-1787905780-a97beab8`, reached
-live investigation, sanity `PROCEED`, proposal validation, and isolated preview. It
-terminally `BLOCKED` with `PREVIEW_FOCUSED_GREEN_FAILED`; preview recorded no real
-path change. The candidate made certainty nullable but omitted status/pairing and
-flow reconciliation, and incorrectly expected a constructor exception. G10 remains
-open. Any future transaction must record this trace as `reviewed_learning`, not retry
-it.
+The earlier protected V1 run, `G10-unresolved-proposal-failure-1787832922-7d8ee8a0`,
+has frozen trace
+`/Users/cgint/dev/dspy-intro-mini-swe-runs/G10-unresolved-proposal-failure-1787832922-7d8ee8a0/trace.jsonl`,
+SHA-256 `c99b3037b0c522eed259eecdd7c9fef4fe61b75b8e717bbed69685ee4ecd099d`
+(24 lines, 134355 bytes).
+
+The historical protected V1 run, `G10-unresolved-proposal-failure-1787905780-a97beab8`,
+reached live investigation, sanity `PROCEED`, proposal validation, and isolated
+preview. Its frozen trace is
+`/Users/cgint/dev/dspy-intro-mini-swe-runs/G10-unresolved-proposal-failure-1787905780-a97beab8/trace.jsonl`,
+SHA-256 `669cbc1c3119597ba09749c1e70335f2fca1459d9fcb8e1ea0fc3bad0861b833`.
+Sequence 28 records `preview` with no real-path change; sequence 29 records terminal
+`BLOCKED` with `PREVIEW_FOCUSED_GREEN_FAILED`. The candidate made certainty nullable
+but omitted status/pairing and flow reconciliation, and incorrectly expected a
+constructor exception. Thus the trace proves a contained rejected proposal and
+preserved real paths; it does not prove G10 semantic completion or a successful G10
+transaction.
+
+Commit `a3328a9` is a later V1 contract-completion repair, not evidence that the
+historical run succeeded. It binds live investigator and follow-up reads/searches to
+mission paths, records a final hash-pinned `proposal_packet`, and limits the live
+proposer inputs to `mission` plus `evidence_packet`. Its `test_v1_` coverage includes
+out-of-mission investigator/follow-up blocking and exact final proposal-packet input;
+supervisor verification reported 68 mini-SWE runner+learner tests, Ruff, and the diff
+check green. Those tests establish the repaired contract, not G10 closure. G10 remains
+open; V2 does not exist. A future admission must be provenance-bound to the frozen
+trace and its verified hash/sequences, rather than injecting raw `reviewed_learning`
+as re-entry guidance.
