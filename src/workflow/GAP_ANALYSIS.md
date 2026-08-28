@@ -274,9 +274,11 @@ map above and from the historical read-only verdicts in §7.
   Optional-import candidate rejected as redundant: existing tested generic import-
   binding guidance already covers it. Protected oracle SHA remains
   `7c2cfbc1eb22ac9b55a9d0f2d53bbd43b124916257f89ef15805152db68d0aa9`.
-  Autonomous G10 retries are paused. G10 remains open, unimplemented, and unauthorized;
-  next progress requires a different execution strategy, not another prompt retry. One V1 run
-  at `2336bb3` produced trace SHA
+  **Historical V1 checkpoint only:** autonomous G10 retries were paused; at that
+  checkpoint G10 was open, unimplemented, and unauthorized, and progress required a
+  different strategy rather than another prompt retry. The later V2 evidence below
+  supersedes that statement as the current implementation/re-entry status; it does not
+  close G10. One V1 run at `2336bb3` produced trace SHA
   `c99b3037b0c522eed259eecdd7c9fef4fe61b75b8e717bbed69685ee4ecd099d` and terminal
   `BLOCKED / INVALID_SANITY`: the model emitted status `success`, outside
   `PROCEED|NEEDS_EVIDENCE|BLOCKED`. No proposal, edit, rollback, or retry occurred; G10 remains open.
@@ -524,7 +526,7 @@ first — independence, durability, and the no-5/5 / inconclusive outcome — be
 those are what make the output *defensible to a PO*, and they are the parts a
 prompt-only pipeline cannot fake.
 
-### G10 V1 preview evidence
+### G10 V1 → V2 preview and learning-reentry evidence
 
 The earlier protected V1 run, `G10-unresolved-proposal-failure-1787832922-7d8ee8a0`,
 has frozen trace
@@ -550,7 +552,37 @@ mission paths, records a final hash-pinned `proposal_packet`, and limits the liv
 proposer inputs to `mission` plus `evidence_packet`. Its `test_v1_` coverage includes
 out-of-mission investigator/follow-up blocking and exact final proposal-packet input;
 supervisor verification reported 68 mini-SWE runner+learner tests, Ruff, and the diff
-check green. Those tests establish the repaired contract, not G10 closure. G10 remains
-open; V2 does not exist. A future admission must be provenance-bound to the frozen
-trace and its verified hash/sequences, rather than injecting raw `reviewed_learning`
-as re-entry guidance.
+check green. Those tests establish the repaired contract, not G10 closure.
+
+V2 implementation is committed in `ab19388`; it admits one typed learning delta only
+when its frozen source trace, terminal, preview/proposal hashes, failed public phase,
+and allowed public-evidence hashes all bind, then passes a redacted safe view into a
+fresh investigation and proposal. The supplied V2 delta/protocol provenance is
+`eeb7276`, with delta SHA-256
+`a919540b78e42a8fa9d28447292f533ae3ab12ffb7678fecdddd3865e3680d35` and safe-view
+SHA-256 `94be3d5b76fb0dc863b2acc22f013d6c8a2152df03f23aba0d0a54409e3bdf05`.
+Independent-review verification reported 95 combined runner+learner tests, Ruff, and
+diff checks green. This verifies the admission protocol and implementation; it does
+not establish candidate correctness or protected acceptance.
+
+Exactly one V2 transaction ran:
+`G10-unresolved-proposal-failure-1787919823-30d7872f`, frozen at
+`/Users/cgint/dev/dspy-intro-mini-swe-runs/G10-unresolved-proposal-failure-1787919823-30d7872f/trace.jsonl`
+(SHA-256 `07b5c09d5f0eea58eebe6db97ea87e6f066b7afef70d7c5c97c21e5b19b8debc`; 31 lines,
+218300 bytes). It records learning-delta admission at sequence 2, live investigation
+at 19, sanity `PROCEED` at 24, packet SHA
+`d06f3d9143a0545fcd495ea9459b475df95fb59a1a5d9eb813a16b9f56a986d5` at 25, and
+proposal validation at 29 for precisely `src/workflow/flow.py`,
+`src/workflow/schemas.py`, and `tests/test_workflow.py`. The proposal SHA is
+`f87a45ba71565692426f2a43ebc5317ea3235662191494e5b4c3400316e721ac`; preview SHA is
+`e34d528866949ea83546fd13e08ea9c8fb4d2a2625da9682a371ba1faeb1eff0` at 30. Its
+materially different strategy tested public `CodeGroundingWorkflow.forward`, reconciled
+the `flow.py` ledger, and paired schema status/certainty. Expected RED was not
+confirmed because the candidate used `monkeypatch` without declaring the fixture:
+6 passed, 1 failed. Terminal sequence 31 is `BLOCKED /
+PREVIEW_RED_NOT_CONFIRMED`, with no real-path diff, protected result, rollback, repair,
+or retry (`rollback_performed: false`). Prior trace and oracle hashes remain unchanged.
+
+V2 proves provenance-bound public-failure → fresh-investigation/proposal transition
+and containment. It does not prove autonomous semantic recovery, candidate correctness,
+protected acceptance, or G10 closure. G10 remains open.
