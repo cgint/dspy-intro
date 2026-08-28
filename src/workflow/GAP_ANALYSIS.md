@@ -523,3 +523,13 @@ suggestion.
 first — independence, durability, and the no-5/5 / inconclusive outcome — because
 those are what make the output *defensible to a PO*, and they are the parts a
 prompt-only pipeline cannot fake.
+
+### G10 V1 preview evidence (commit `2119d3c`)
+
+One protected V1 run, `G10-unresolved-proposal-failure-1787905780-a97beab8`, reached
+live investigation, sanity `PROCEED`, proposal validation, and isolated preview. It
+terminally `BLOCKED` with `PREVIEW_FOCUSED_GREEN_FAILED`; preview recorded no real
+path change. The candidate made certainty nullable but omitted status/pairing and
+flow reconciliation, and incorrectly expected a constructor exception. G10 remains
+open. Any future transaction must record this trace as `reviewed_learning`, not retry
+it.
