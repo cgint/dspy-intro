@@ -336,10 +336,10 @@ def acceptance_pytest_argv(repo_root: Path, relative_path: str) -> list[str]:
     return [str(repo_root / ".venv" / "bin" / "python"), "-m", "pytest", "-p", "no:cacheprovider", relative_path, "-q"]
 
 
-def bounded_read(repo_root: Path | str, relative_path: str, max_bytes: int = 24_000) -> ReadResult:
+def bounded_read(repo_root: Path | str, relative_path: str, max_bytes: int = 24_000, allowed_paths: list[str] | None = None) -> ReadResult:
     if max_bytes <= 0:
         raise ValueError("max_bytes must be positive")
-    target = resolve_repo_file(repo_root, relative_path)
+    target = _validate_allowed_file(repo_root, allowed_paths, relative_path) if allowed_paths is not None else resolve_repo_file(repo_root, relative_path)
     data = target.read_bytes()
     return ReadResult(
         path=relative_path,
@@ -348,7 +348,7 @@ def bounded_read(repo_root: Path | str, relative_path: str, max_bytes: int = 24_
     )
 
 
-def bounded_search(repo_root: Path | str, query: str, max_results: int = 20, max_bytes: int = 48_000) -> SearchResult:
+def bounded_search(repo_root: Path | str, query: str, max_results: int = 20, max_bytes: int = 48_000, allowed_paths: list[str] | None = None) -> SearchResult:
     if not query:
         raise ValueError("query must not be empty")
     root = Path(repo_root).resolve(strict=True)
@@ -362,6 +362,7 @@ def bounded_search(repo_root: Path | str, query: str, max_results: int = 20, max
             or path.is_symlink()
             or not path.is_file()
             or _is_sensitive_path(relative)
+            or (allowed_paths is not None and not _is_allowed(relative.as_posix(), allowed_paths))
         ):
             continue
         remaining = max_bytes - bytes_seen
@@ -727,9 +728,7 @@ class ProposeEditsSignature(dspy.Signature):
     """Produce exact-hash test edits first and production edits second using only supplied evidence. Multiple same-file replacements are permitted only within one phase when non-overlapping, non-empty, and sharing the original full-file hash; cross-phase reuse is forbidden. When production introduces a new symbol, obtain assertion-level RED through an existing import/module/public API surface and do not import the not-yet-created production symbol in the test-only phase. An expected-error/rejection test must fail if the expected error is absent and its failing path must include the exact mission Expected RED text: use pytest.raises(match=Expected RED text) or an explicit failure message containing it. Do not rely on an assertion after the context manager because it is unreachable when no exception occurs; silent try/except fallthrough is forbidden. Every identifier introduced by an edit must be bound by an existing or proposed matching import before use; match import form (`from package import name` uses `name`, while `import package` uses `package.name`), keep imports at module top, and prevent collection-time NameError or unbound decorator references. Before proposing an import, inspect and reuse existing module-top bindings; never add a function-local import for a name already bound at module scope, especially after earlier use in that function, because it shadows the entire local scope. Any pytest-provided identifier must be declared in test function fixture parameters (or explicitly constructed); never use an undeclared fixture name. Reserve pytest.raises for contracts that actually raise. If a mission or public contract returns a failure status/object, call the existing public surface and assert the returned state; never expect a constructor/call exception instead."""
 
     mission: str = dspy.InputField()
-    investigation: Investigation = dspy.InputField()
-    repository_evidence: str = dspy.InputField()
-    reviewed_learning: str = dspy.InputField()
+    evidence_packet: str = dspy.InputField()
     proposal: ChangeProposal = dspy.OutputField()
 
 
@@ -823,7 +822,7 @@ class MiniSWEWorkflow:
 
         def read_repo_file(path: str) -> str:
             try:
-                result = bounded_read(self.repo_root, path)
+                result = bounded_read(self.repo_root, path, allowed_paths=self.mission.allowed_paths)
                 ledger.append("tool", {"tool": "read_repo_file", "input": {"path": path}, "output": result})
                 return result.model_dump_json()
             except Exception as error:
@@ -832,7 +831,7 @@ class MiniSWEWorkflow:
 
         def search_repo(query: str) -> str:
             try:
-                result = bounded_search(self.repo_root, query)
+                result = bounded_search(self.repo_root, query, allowed_paths=self.mission.allowed_paths)
                 ledger.append("tool", {"tool": "search_repo", "input": {"query": query}, "output": result})
                 return result.model_dump_json()
             except Exception as error:
@@ -862,13 +861,11 @@ class MiniSWEWorkflow:
         prediction = dspy.Predict(EvidenceSanitySignature)(packet=json.dumps(packet, sort_keys=True))
         return SanityDecision(status=str(prediction.status), reason=str(prediction.reason), capability=prediction.capability)
 
-    def _live_proposal(self, investigation: Investigation) -> ChangeProposal:
+    def _live_proposal(self, packet_json: str) -> ChangeProposal:
         self._configure_live()
         prediction = dspy.Predict(ProposeEditsSignature)(
             mission=f"{self.mission.goal}\nExpected RED text: {self.mission.expected_red_text}",
-            investigation=investigation,
-            repository_evidence=self._repository_evidence(),
-            reviewed_learning=json.dumps(self.mission.reviewed_learning),
+            evidence_packet=packet_json,
         )
         return prediction.proposal if isinstance(prediction.proposal, ChangeProposal) else ChangeProposal.model_validate(prediction.proposal)
 
@@ -1053,9 +1050,10 @@ class MiniSWEWorkflow:
             ledger.append("sanity", {"decision": decision.model_dump(mode="json")})
             if decision.status == "BLOCKED":
                 return self._blocked(ledger, run_directory, "SANITY_BLOCKED", None, {"reason": decision.reason})
+            packet["sanity"] = decision.model_dump(mode="json")
             if decision.status == "NEEDS_EVIDENCE":
                 try:
-                    follow_up = bounded_read(self.repo_root, decision.capability.path) if decision.capability and decision.capability.kind == "bounded_read" else bounded_search(self.repo_root, decision.capability.query) if decision.capability else None
+                    follow_up = bounded_read(self.repo_root, decision.capability.path, allowed_paths=self.mission.allowed_paths) if decision.capability and decision.capability.kind == "bounded_read" else bounded_search(self.repo_root, decision.capability.query, allowed_paths=self.mission.allowed_paths) if decision.capability else None
                     if follow_up is None or follow_up.truncated:
                         return self._blocked(ledger, run_directory, "NEEDS_EVIDENCE_BLOCKED", None)
                 except Exception as error:
@@ -1063,11 +1061,13 @@ class MiniSWEWorkflow:
                 follow_up_data = follow_up.model_dump(mode="json")
                 packet["follow_up"] = follow_up_data
                 ledger.append("evidence_follow_up", {"sha256": sha256_text(json.dumps(follow_up_data, sort_keys=True)), "result": follow_up_data})
+            packet_json = json.dumps(packet, sort_keys=True)
+            ledger.append("proposal_packet", {"sha256": sha256_text(packet_json), "packet": packet})
             self._stage_end(ledger, "sanity", {"status": decision.status})
 
             self._stage_start(ledger, "proposal")
             try:
-                proposal = self.proposal_source(self.mission, investigation) if self.proposal_source else self._live_proposal(investigation)
+                proposal = self.proposal_source(self.mission, investigation) if self.proposal_source else self._live_proposal(packet_json)
             except Exception as error:
                 self._stage_error(ledger, "proposal", error)
                 return self._blocked(ledger, run_directory, "PROPOSAL_FAILED", None, {"error": repr(error)})

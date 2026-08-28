@@ -1,4 +1,4 @@
-# Mini SWE workflow (V0)
+# Mini SWE workflow (V1)
 
 A contained, mission-driven DSPy workflow. DSPy investigates and proposes; Python owns path containment, edits, verification, trace evidence, and `DONE`/`BLOCKED`.
 
@@ -27,10 +27,8 @@ Each run writes a sanitized append-only JSONL trace under the external run root 
 
 V0 has no shell tool or model write tool, permits exact edits only to existing allow-listed files, and allows only repo-venv pytest commands. Tests inject DSPy sources; they do not call providers. This runner does not promote learner candidates or replace mechanical terminal gates with model judgment.
 
-## Proposed V1 direction — not implemented
+## V1 evidence and preview boundary
 
-V0 remains a single contained mission transaction: a separate read-only ReAct investigation, a typed edit proposal, Python-owned gates, and a non-gating post-GREEN review. The following is the next bounded learning slice only; it changes no runtime behavior. G10 remains separate.
+V1 freezes mission-public investigation evidence and runs one sanity decision: `PROCEED`, `NEEDS_EVIDENCE`, or `BLOCKED`. Investigator reads/searches and the one optional follow-up are restricted to `allowed_paths`; protected acceptance artifacts and all other repository content are outside investigator and proposer input. After the optional follow-up, Python serializes one final immutable packet, records its SHA-256 as `proposal_packet`, and supplies those exact bytes to the one live proposer invocation.
 
-V1 would freeze the investigation facts and tool trace, then run a sanity checkpoint with exactly one outcome: `PROCEED`, `NEEDS_EVIDENCE`, or `BLOCKED`. `NEEDS_EVIDENCE` may permit one specifically justified fresh investigation question before proposal. It must not trigger automatic repeated edits or an unbounded investigation/edit loop.
-
-Tools would be standardized as bounded capabilities assigned per role, each with a declared purpose, scope, timeout, output contract, provenance, and deterministic enforcement. V1 does not add a general shell. Local prior art to examine—not adopted designs—is `../agent-coding-assistant/dspy_agent_tool_restricted_shell.py`, `../agent-coding-assistant/cli_gather_info.py`, and `../ops-resolver/src/tool_shell.py`. Their `shell=True` prefix checks are not a policy design to copy.
+The normalized proposal is then previewed in a disposable copy before real-target edits. A failed preview blocks without retry, repair, or real-target mutation. A passing preview admits the same proposal to the unchanged V0 RED/GREEN/Ruff/protected-acceptance/review gates. V1 adds no shell, model write tool, cross-transaction learning, or semantic model authority.

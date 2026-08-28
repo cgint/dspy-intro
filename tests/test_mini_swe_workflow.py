@@ -199,6 +199,107 @@ def test_v1_sanity_packet_binds_redacted_persisted_investigator_trace(tmp_path):
     assert "[REDACTED]" in encoded
 
 
+def test_v1_live_investigator_tools_never_expose_out_of_mission_content(tmp_path, monkeypatch):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    (repo / "protected_acceptance.py").write_text("protected-needle\n")
+    mission = make_mission(runner, repo).model_copy(update={"allowed_paths": ["source.py"]})
+    workflow = runner.MiniSWEWorkflow(mission, tmp_path / "runs")
+    observed: dict[str, str] = {}
+
+    class FakeReAct:
+        def __init__(self, signature, tools):
+            assert signature is runner.InvestigateMissionSignature
+            self.tools = tools
+
+        def __call__(self, **_kwargs):
+            observed["read"] = self.tools[0]("protected_acceptance.py")
+            observed["search"] = self.tools[1]("protected-needle")
+            return type("Prediction", (), {"facts": [], "category": "test"})()
+
+    monkeypatch.setattr(workflow, "_configure_live", lambda: None)
+    monkeypatch.setattr(runner.dspy, "ReAct", FakeReAct)
+
+    workflow._live_investigation(runner.EventLedger(tmp_path / "trace.jsonl"))
+
+    assert observed["read"].startswith("TOOL_ERROR: Outside mission allow-list")
+    assert "protected_acceptance.py" not in observed["search"]
+
+
+def test_v1_live_proposer_receives_exact_final_hash_pinned_packet(tmp_path, monkeypatch):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    mission = make_mission(runner, repo)
+    captured: dict[str, str] = {}
+
+    class FakePredict:
+        def __init__(self, signature):
+            assert signature is runner.ProposeEditsSignature
+
+        def __call__(self, **kwargs):
+            captured["packet"] = kwargs["evidence_packet"]
+            assert set(kwargs) == {"mission", "evidence_packet"}
+            return type("Prediction", (), {"proposal": successful_proposal(runner, repo)})()
+
+    workflow = runner.MiniSWEWorkflow(
+        mission,
+        tmp_path / "runs",
+        investigation_source=lambda _mission: runner.Investigation(facts=["fact"], category="test"),
+        sanity_source=lambda _mission, _investigation, _packet: runner.SanityDecision(
+            status="NEEDS_EVIDENCE",
+            reason="read source",
+            capability=runner.EvidenceCapability(kind="bounded_read", path="source.py"),
+        ),
+        review_source=lambda *_args: runner.PostGreenReview(judgment="reviewed", concerns=[], evidence_requests=[]),
+    )
+    monkeypatch.setattr(workflow, "_configure_live", lambda: None)
+    monkeypatch.setattr(runner.dspy, "Predict", FakePredict)
+
+    result = workflow.run()
+
+    assert result.status is runner.TerminalStatus.DONE
+    events = [json.loads(line) for line in result.ledger_path.read_text().splitlines()]
+    packet = next(event["payload"] for event in events if event["event"] == "proposal_packet")
+    assert captured["packet"] == json.dumps(packet["packet"], sort_keys=True)
+    assert packet["sha256"] == runner.sha256_text(captured["packet"])
+    final_packet = json.loads(captured["packet"])
+    assert final_packet["sanity"] == {
+        "status": "NEEDS_EVIDENCE",
+        "reason": "read source",
+        "capability": {"kind": "bounded_read", "path": "source.py", "query": None},
+    }
+    assert final_packet["follow_up"]["path"] == "source.py"
+
+
+def test_v1_out_of_allowed_follow_up_blocks_before_proposal_without_content_exposure(tmp_path):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    protected = repo / "protected_acceptance.py"
+    protected.write_text("protected-follow-up-content\n")
+    called = False
+
+    def proposal(_mission, _investigation):
+        nonlocal called
+        called = True
+        return successful_proposal(runner, repo)
+
+    result = runner.MiniSWEWorkflow(
+        make_mission(runner, repo),
+        tmp_path / "runs",
+        investigation_source=lambda _mission: runner.Investigation(facts=[], category="test"),
+        proposal_source=proposal,
+        sanity_source=lambda _mission, _investigation, _packet: runner.SanityDecision(
+            status="NEEDS_EVIDENCE",
+            reason="inspect protected path",
+            capability=runner.EvidenceCapability(kind="bounded_read", path="protected_acceptance.py"),
+        ),
+    ).run()
+
+    assert result.reason == "NEEDS_EVIDENCE_BLOCKED"
+    assert called is False
+    assert "protected-follow-up-content" not in result.ledger_path.read_text()
+
+
 def test_v1_preview_copy_excludes_dotenv_files(tmp_path, monkeypatch):
     runner = runner_module()
     repo = make_repo(tmp_path)
@@ -411,10 +512,10 @@ def test_load_mission_file_binds_external_repo_model_and_reviewed_learning(tmp_p
     assert mission.mission_provenance == str(mission_file.resolve())
 
 
-def test_live_proposal_guides_assertion_red_existing_surface_and_receives_learning(tmp_path, monkeypatch):
+def test_live_proposal_guides_assertion_red_existing_surface_and_receives_only_packet(tmp_path, monkeypatch):
     runner = runner_module()
     repo = make_repo(tmp_path)
-    mission = make_mission(runner, repo).model_copy(update={"reviewed_learning": ["accepted-guidance"]})
+    mission = make_mission(runner, repo)
     workflow = runner.MiniSWEWorkflow(mission, tmp_path / "runs")
     captured: dict[str, object] = {}
 
@@ -426,16 +527,19 @@ def test_live_proposal_guides_assertion_red_existing_surface_and_receives_learni
             captured.update(kwargs)
             return type("Prediction", (), {"proposal": runner.ChangeProposal()})()
 
+    assert set(runner.ProposeEditsSignature.input_fields) == {"mission", "evidence_packet"}
+    packet_json = json.dumps({"frozen": "evidence"}, sort_keys=True)
     monkeypatch.setattr(workflow, "_configure_live", lambda: None)
     monkeypatch.setattr(runner.dspy, "Predict", FakePredict)
-    workflow._live_proposal(runner.Investigation(facts=["fact"], category="category"))
+    workflow._live_proposal(packet_json)
 
     instruction = runner.ProposeEditsSignature.__doc__
     assert "assertion-level RED" in instruction
     assert "existing import/module/public API surface" in instruction
     assert "not-yet-created production symbol" in instruction
     assert "expected-error/rejection test must fail if the expected error is absent" in instruction
-    assert captured["reviewed_learning"] == json.dumps(["accepted-guidance"])
+    assert captured["evidence_packet"] == packet_json
+    assert set(captured) == {"mission", "evidence_packet"}
 
 
 def test_runner_blocks_dirty_allowed_file_before_any_source(tmp_path):
