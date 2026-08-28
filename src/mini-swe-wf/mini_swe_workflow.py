@@ -22,7 +22,7 @@ import uuid
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import dspy
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -704,9 +704,23 @@ class EvidenceSanitySignature(dspy.Signature):
     """Return one evidence sufficiency decision; never propose or invoke tools."""
 
     packet: str = dspy.InputField()
-    status: str = dspy.OutputField()
-    reason: str = dspy.OutputField()
-    capability: EvidenceCapability | None = dspy.OutputField()
+    status: Literal["PROCEED", "NEEDS_EVIDENCE", "BLOCKED"] = dspy.OutputField(
+        desc=(
+            "Evidence sufficiency status. Use PROCEED when the packet is sufficient; "
+            "NEEDS_EVIDENCE only with one bounded-read/search capability; BLOCKED "
+            "when evidence cannot support proceeding. Examples: PROCEED, "
+            "NEEDS_EVIDENCE, BLOCKED."
+        )
+    )
+    reason: str = dspy.OutputField(
+        desc="Short evidence-based explanation for the selected status."
+    )
+    capability: EvidenceCapability | None = dspy.OutputField(
+        desc=(
+            "One bounded_read or bounded_search request only for NEEDS_EVIDENCE; "
+            "otherwise null."
+        )
+    )
 
 
 class ProposeEditsSignature(dspy.Signature):

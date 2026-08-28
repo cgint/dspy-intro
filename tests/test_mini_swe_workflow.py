@@ -7,8 +7,10 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Literal
 
 import pytest
+from pydantic import ValidationError
 
 
 RUNNER_PATH = (
@@ -110,6 +112,51 @@ def sources(runner, proposal, concerns: list[str] | None = None):
             evidence_requests=[],
         ),
     }
+
+
+def test_v1_sanity_signature_constrains_and_describes_model_output():
+    runner = runner_module()
+    fields = runner.EvidenceSanitySignature.fields
+
+    assert fields["status"].annotation == Literal[
+        "PROCEED", "NEEDS_EVIDENCE", "BLOCKED"
+    ]
+    assert fields["status"].json_schema_extra["desc"] == (
+        "Evidence sufficiency status. Use PROCEED when the packet is sufficient; "
+        "NEEDS_EVIDENCE only with one bounded-read/search capability; BLOCKED "
+        "when evidence cannot support proceeding. Examples: PROCEED, "
+        "NEEDS_EVIDENCE, BLOCKED."
+    )
+    assert fields["reason"].json_schema_extra["desc"] == (
+        "Short evidence-based explanation for the selected status."
+    )
+    assert fields["capability"].json_schema_extra["desc"] == (
+        "One bounded_read or bounded_search request only for NEEDS_EVIDENCE; "
+        "otherwise null."
+    )
+
+
+def test_v1_live_sanity_rejects_invalid_raw_status(tmp_path, monkeypatch):
+    runner = runner_module()
+    repo = make_repo(tmp_path)
+    workflow = runner.MiniSWEWorkflow(make_mission(runner, repo), tmp_path / "runs")
+
+    class FakePredict:
+        def __init__(self, signature):
+            assert signature is runner.EvidenceSanitySignature
+
+        def __call__(self, **_kwargs):
+            return type(
+                "Prediction",
+                (),
+                {"status": "success", "reason": "not a sanctioned status", "capability": None},
+            )()
+
+    monkeypatch.setattr(workflow, "_configure_live", lambda: None)
+    monkeypatch.setattr(runner.dspy, "Predict", FakePredict)
+
+    with pytest.raises(ValidationError, match="invalid sanity status"):
+        workflow._live_sanity({"facts": []})
 
 
 def test_v1_sanity_proceed_and_one_follow_up_are_hash_pinned(tmp_path):
