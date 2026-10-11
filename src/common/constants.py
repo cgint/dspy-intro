@@ -1,6 +1,6 @@
 
 
-MODEL_NAME_GEMINI_3_5_FLASH = "gemini-3.5-flash"
+MODEL_NAME_GEMINI_3_5_FLASH = "gemini-3.8-flash"
 MODEL_NAME_GEMINI_3_5_FLASH_LITE = "gemini-3.5-flash-lite"
 
 # --- Ollama OpenAI-compatible defaults ---

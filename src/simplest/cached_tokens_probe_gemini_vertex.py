@@ -6,8 +6,8 @@ Make sequential requests with a large shared prefix and print DSPy usage stats,
 including whether provider-side implicit caching was used.
 
 We test both providers explicitly by using model ids:
-- Gemini API:  gemini/gemini-3.5-flash
-- Vertex AI:   vertex_ai/gemini-3.5-flash
+- Gemini API:  gemini/gemini-3.8-flash
+- Vertex AI:   vertex_ai/gemini-3.8-flash
 
 Notes
 -----
@@ -169,7 +169,7 @@ def main() -> None:
             print("Skipping Gemini API probe: GEMINI_API_KEY not set")
             exit_code = max(exit_code, 2)
         else:
-            result = run_probe(model_id="gemini/gemini-3.5-flash", rounds=args.rounds, sleep_s=args.sleep)
+            result = run_probe(model_id="gemini/gemini-3.8-flash", rounds=args.rounds, sleep_s=args.sleep)
             if args.strict:
                 exit_code = max(exit_code, result)
 
@@ -178,7 +178,7 @@ def main() -> None:
             print("Skipping Vertex AI probe: VERTEXAI_PROJECT and/or VERTEXAI_LOCATION not set")
             exit_code = max(exit_code, 2)
         else:
-            result = run_probe(model_id="vertex_ai/gemini-3.5-flash", rounds=args.rounds, sleep_s=args.sleep)
+            result = run_probe(model_id="vertex_ai/gemini-3.8-flash", rounds=args.rounds, sleep_s=args.sleep)
             if args.strict:
                 exit_code = max(exit_code, result)
 
